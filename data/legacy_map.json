@@ -1,0 +1,35 @@
+{
+  "_note": "Maps old-convention AG: tags onto the new definition sheet. Edit freely; first matching tag wins per field. Unmapped tags still appear under angle_tags.",
+  "concept": {
+    "Hair Breakage": "Hair Breakage",
+    "skin": "Itchy Skin",
+    "Bladder": "Bladder",
+    "Offer": "General",
+    "Bottom of Funnel": "General"
+  },
+  "reason": {
+    "GLP-1": "GLP-1",
+    "GLP-1,Journey": "GLP-1",
+    "Perimenopause/Menopause": "Menopause",
+    "Age-Estrogen": "Menopause",
+    "HRT": "Menopause",
+    "PCOS": "PCOS",
+    "thyroid": "Thyroid",
+    "Androgenic Alopecia": "AGA"
+  },
+  "angle": {
+    "Explaining DHT": "Explaining DHT",
+    "DHT is not a gimmick": "Explaining DHT",
+    "Miniaturization": "Explaining DHT",
+    "Estrogen Shield": "Estrogen - DHT",
+    "Age-Estrogen": "Estrogen - DHT",
+    "Hormonal Hair Loss": "Estrogen - DHT",
+    "Comparing - Minoxidil": "Comparing - Minoxidil",
+    "With Minoxidil": "Comparing - Minoxidil",
+    "Comparing - Biotin": "Comparing - Biotin",
+    "vs Generic PSO": "Comparing - PSOs",
+    "Comparing-Lenoria": "Comparing - PSOs",
+    "Biofilm": "Biofilm",
+    "Big Pharma": "Big Pharma"
+  }
+}
