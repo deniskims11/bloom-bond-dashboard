@@ -31,5 +31,12 @@
     "Comparing-Lenoria": "Comparing - PSOs",
     "Biofilm": "Biofilm",
     "Big Pharma": "Big Pharma"
+  },
+  "format": {
+    "AiC - Podcast": "AIPodcast",
+    "AiC - Normal": "AIUGC",
+    "AI VO": "AIVOBroll",
+    "UGC": "UGCTalkingHead",
+    "Viral/No voice": "ViralNoVoice"
   }
 }

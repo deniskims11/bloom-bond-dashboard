@@ -37,6 +37,15 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 MATURE_DAYS = 14
 FUNNEL_OF = {"Unaware": "TOF", "Problem Aware": "TOF", "Solution Aware": "MOF",
              "Product Aware": "BOF", "Most Aware": "BOF"}
+AWARENESS = ["Unaware", "Problem Aware", "Solution Aware", "Product Aware", "Most Aware"]
+
+
+def norm_awareness(v):
+    """'SolutionAware' (sheet) and 'Solution Aware' (old names) -> 'Solution Aware'."""
+    key = (v or "").replace(" ", "").lower()
+    return next((a for a in AWARENESS if a.replace(" ", "").lower() == key), v or None)
+
+
 COPY_RE = re.compile(r"\s*[-–]\s*Copy(\s*\d+)?\s*$", re.I)
 
 
@@ -119,6 +128,10 @@ def parse_old(name, legacy):
     m = re.match(r"(.*?)_B_([^_]+)_([^_]+)_([^_]+)_?(.*)$", lp_raw)
     lp, creative_no, product, fmt, desc = (m.groups() if m else (lp_raw, None, None, None, None))
     lp = (lp or "").split("|")[0].strip() or None
+    if lp and lp.startswith("B_"):  # creative-number block landed in the LP slot
+        lp = None
+    if product and re.fullmatch(r"[.\d]*PSO[.\d]*", product):  # ".1PSO", "PSO.2" -> PSO
+        product = "PSO"
 
     ag_raw = tags.get("AG", "")
     ag = [x.strip() for x in re.findall(r"\{([^}]*)\}", ag_raw)] or ([ag_raw.strip()] if ag_raw.strip() else [])
@@ -137,7 +150,8 @@ def parse_old(name, legacy):
                  or ("Offer" if any(a in ("Offer", "Bottom of Funnel") for a in ag) else None),
         "angle_tags": ag or None,
         "avatar": (tags.get("AV") or "").lstrip("@").strip() or None,
-        "script": (desc or "").strip() or None, "type": typ, "format": fmt,
+        "script": (desc or "").strip() or None, "type": typ,
+        "format": legacy.get("format", {}).get(fmt, fmt),
         "origin": tags.get("OR") or None, "awareness_stage": tags.get("SOA") or None,
         "length": (tags.get("LN") or "").replace("Short-From", "Short-Form") or None,
         "persuasion": tags.get("PC") or None, "static_type": (tags.get("ST") or "").rstrip("+") or None,
@@ -217,7 +231,7 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
                     v[j] += num(x[k])
 
         image = next((r["image_url"] for r in rs if r.get("image_url")), None)
-        aw = tags.get("awareness_stage")
+        aw = norm_awareness(tags.get("awareness_stage"))
         metrics = {
             "spend": round(spend, 2),
             # Primary lens: Meta-reported (7DC/1DV) revenue and purchases.

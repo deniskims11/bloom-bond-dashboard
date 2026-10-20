@@ -1,3 +1,4 @@
+import NvpLedger from "./NvpLedger.jsx";
 import { useEffect, useMemo, useState } from "react";
 import {
   BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -13,7 +14,10 @@ const fmtFull = (n) => `$${Math.round(n).toLocaleString()}`;
 const fmtNum = (n) => n == null ? "—" : Number(n).toLocaleString();
 const fmtPct = (n) => n == null ? "—" : `${Number(n).toFixed(1)}%`;
 
-const TABS = ["Overview", "Win Rate", "Angles", "Concepts", "Avatars", "Breakdowns", "Analysis", "Data Clean Up"];
+const MAX_AN_RULES = 8;
+const DEPTH_BG = ["transparent", "#FBF7F4", "#F5EDE5", "#EFE3D8", "#E9DACD"];
+const depthBg = (d) => DEPTH_BG[Math.min(d, DEPTH_BG.length - 1)];
+const TABS = ["Overview", "Win Rate", "Concepts", "Reasons", "Angles", "Avatars", "Formats", "NVP Buckets", "Breakdowns", "Analysis", "Data Clean Up"];
 const THRESHOLDS = ["$1K", "$5K", "$15K", "$25K", "$50K", "$100K", "$150K+"];
 
 // Coloured relative to the account baseline (set from the manifest), so the
@@ -554,6 +558,12 @@ export default function Dashboard() {
   const concepts = useMemo(() => toBreakdownRows(groupBy(ads, "concept")), [ads]);
   const angles = useMemo(() => toBreakdownRows(groupBy(ads, "angle")), [ads]);
   const icps = useMemo(() => toBreakdownRows(groupBy(ads, "icp")), [ads]);
+  const reasons = useMemo(() => toBreakdownRows(groupBy(ads, "reason")), [ads]);
+  // Two-level combos from the definition sheet hierarchy, flattened to "A · B" rows.
+  const comboRows = (d1, d2) => toBreakdownRows(groupBy(
+    ads.map(a => ({ ...a, _combo: `${a[d1] ?? "(untagged)"} · ${a[d2] ?? "(untagged)"}` })), "_combo"));
+  const conceptReason = useMemo(() => comboRows("concept", "reason"), [ads]);
+  const reasonAngle = useMemo(() => comboRows("reason", "angle"), [ads]);
   const awareness = useMemo(() => toBreakdownRows(groupBy(ads, "awareness_stage")), [ads]);
   const scripts = useMemo(() => toBreakdownRows(groupBy(ads, "script")), [ads]);
   const formatList = useMemo(
@@ -1051,6 +1061,27 @@ export default function Dashboard() {
           </div>
         )}
 
+        {tab === "Reasons" && (
+          <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "1px solid #E8DCD0", overflowX: "auto" }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 4px", color: "#3a2429" }}>Reason Performance ({reasons.length} reasons) · <span style={{ fontWeight: 400, color: "#b0978f" }}>click a row to drill into creatives</span></h3>
+            <p style={{ fontSize: 11, color: "#b0978f", margin: "0 0 12px" }}>Why it is happening to her (definition sheet: General, Menopause, GLP-1, PCOS, AGA, Thyroid, Insulin Resistance). Sits between Concept and Angle — see Breakdowns → Concept × Reason and Reason × Angle.</p>
+            <BreakdownTable rows={reasons} nameLabel="Reason" onRowClick={r => openModal(`Reason: ${r.name}`, `${r.creatives} creatives · Spend ${fmt(r.spend)}`, r.ads)} />
+          </div>
+        )}
+        {tab === "Formats" && (
+          <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "1px solid #E8DCD0", overflowX: "auto" }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 4px", color: "#3a2429" }}>Format Performance ({formats.length} formats) · <span style={{ fontWeight: 400, color: "#b0978f" }}>click a row to drill into creatives</span></h3>
+            <p style={{ fontSize: 11, color: "#b0978f", margin: "0 0 12px" }}>Creative format. Old-convention names are mapped onto the definition sheet formats where the match is unambiguous (e.g. AiC - Podcast → AIPodcast); Image / Native Ad stay as their Type.</p>
+            <BreakdownTable rows={formats} nameLabel="Format" onRowClick={r => openModal(`Format: ${r.name}`, `${r.creatives} creatives · Spend ${fmt(r.spend)}`, r.ads)} />
+          </div>
+        )}
+        {tab === "NVP Buckets" && (
+          canActivity ? (
+            <NvpLedger ads={manifest.ads} days={manifest.days} baselineNc={BASELINE.ncroas}
+              roasLabel={LBL.roas || "ROAS"} />
+          ) : <p style={{ color: "#8a6f68" }}>Needs daily data — available after the next refresh.</p>
+        )}
+
         {tab === "Avatars" && (
           <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "1px solid #E8DCD0", overflowX: "auto" }}>
             <h3 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 12px", color: "#3a2429" }}>Avatar Performance ({icps.length} avatars) · <span style={{ fontWeight: 400, color: "#b0978f" }}>click a row to drill into creatives</span></h3>
@@ -1061,7 +1092,7 @@ export default function Dashboard() {
         {tab === "Breakdowns" && (
           <div>
             <div style={{ display: "flex", gap: 3, background: "#E8DCD0", borderRadius: 6, padding: 2, marginBottom: 16, width: "fit-content", flexWrap: "wrap" }}>
-              {["Funnel (TOF/MOF/BOF)", "Format", "Type", "Reason", "Origin", "Awareness Stage", "Strategist", "Editor", "Writer", "Length", "Persuasion", "Landing Page", "Script", "Launch Status", "Angle × Concept"].map(v => (
+              {["Funnel (TOF/MOF/BOF)", "Format", "Type", "Reason", "Origin", "Awareness Stage", "Strategist", "Editor", "Writer", "Length", "Persuasion", "Landing Page", "Script", "Launch Status", "Concept × Reason", "Reason × Angle", "Angle × Concept"].map(v => (
                 <button key={v} onClick={() => setBdView(v)} style={{
                   padding: "6px 14px", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 12, fontWeight: 600,
                   background: bdView === v ? "#fff" : "transparent", color: bdView === v ? "#50000B" : "#8a6f68",
@@ -1073,6 +1104,20 @@ export default function Dashboard() {
               <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "1px solid #E8DCD0", overflowX: "auto" }}>
                 <h3 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 12px", color: "#3a2429" }}>Performance by Awareness Stage ({awareness.length})</h3>
                 <BreakdownTable rows={awareness} nameLabel="Awareness Stage" onRowClick={r => openModal(`Awareness: ${r.name}`, `${r.creatives} creatives · Spend ${fmt(r.spend)}`, r.ads)} />
+              </div>
+            )}
+
+            {bdView === "Concept × Reason" && (
+              <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "1px solid #E8DCD0", overflowX: "auto" }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 12px", color: "#3a2429" }}>Performance by Concept × Reason ({conceptReason.length})</h3>
+                <BreakdownTable rows={conceptReason} nameLabel="Concept × Reason" onRowClick={r => openModal(`Concept × Reason: ${r.name}`, `${r.creatives} creatives · Spend ${fmt(r.spend)}`, r.ads)} />
+              </div>
+            )}
+
+            {bdView === "Reason × Angle" && (
+              <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "1px solid #E8DCD0", overflowX: "auto" }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 12px", color: "#3a2429" }}>Performance by Reason × Angle ({reasonAngle.length})</h3>
+                <BreakdownTable rows={reasonAngle} nameLabel="Reason × Angle" onRowClick={r => openModal(`Reason × Angle: ${r.name}`, `${r.creatives} creatives · Spend ${fmt(r.spend)}`, r.ads)} />
               </div>
             )}
 
@@ -1608,6 +1653,7 @@ function TreeTable({ nodes, dimLabels, onLeafClick }) {
           {sortHeader("Spend", "spend")}
           {sortHeader("Revenue", "rev")}
           {sortHeader("ROAS", "roas")}
+          {HAS_NC && sortHeader("NCROAS", "ncroas")}
           {sortHeader("% New Cust.", "pct_new")}
           {sortHeader("Purchases", "txns")}
           {sortHeader("AOV", "aov")}
@@ -1618,9 +1664,9 @@ function TreeTable({ nodes, dimLabels, onLeafClick }) {
         {rows.map(r => (
           <tr key={r.path}
             onClick={() => r.isLeaf ? onLeafClick(r.n, r.path) : toggle(r.path)}
-            style={{ borderBottom: "1px solid #F5EDE5", cursor: "pointer", background: r.depth === 0 ? "transparent" : r.depth === 1 ? "#FBF7F4" : "#F5EDE5" }}
+            style={{ borderBottom: "1px solid #F5EDE5", cursor: "pointer", background: depthBg(r.depth) }}
             onMouseEnter={e => (e.currentTarget.style.background = "#FDE9BF")}
-            onMouseLeave={e => (e.currentTarget.style.background = r.depth === 0 ? "transparent" : r.depth === 1 ? "#FBF7F4" : "#F5EDE5")}>
+            onMouseLeave={e => (e.currentTarget.style.background = depthBg(r.depth))}>
             <td style={{ ...td, paddingLeft: 10 + r.depth * 20, fontWeight: r.depth === 0 ? 600 : 500 }}>
               <span style={{ display: "inline-block", width: 14, color: "#b0978f" }}>{!r.isLeaf ? (r.isOpen ? "▼" : "▶") : "•"}</span>
               {r.n.value}
@@ -1630,6 +1676,7 @@ function TreeTable({ nodes, dimLabels, onLeafClick }) {
             <td style={{ ...td, textAlign: "right", fontWeight: 500 }}>{fmt(r.n.agg.spend)}</td>
             <td style={{ ...td, textAlign: "right" }}>{fmt(r.n.agg.rev)}</td>
             <td style={{ ...td, textAlign: "right" }}><RoasBadge roas={r.n.agg.roas} /></td>
+            {HAS_NC && <td style={{ ...td, textAlign: "right" }}><RoasBadge roas={r.n.agg.ncroas} base="ncroas" /></td>}
             <td style={{ ...td, textAlign: "right" }}>{fmtPct(r.n.agg.pct_new)}</td>
             <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtNum(r.n.agg.txns)}</td>
             <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{r.n.agg.aov ? `$${r.n.agg.aov.toFixed(0)}` : "—"}</td>
@@ -1654,7 +1701,7 @@ function AnalysisTab({ ads, ALL_DIMS_LABELS, METRIC_MAP, anRules, setAnRules, an
   }));
   const clearRuleValues = (i) => setAnRules(rs => rs.map((r, idx) => idx === i ? { ...r, values: new Set() } : r));
   const removeRule = (i) => setAnRules(rs => rs.filter((_, idx) => idx !== i));
-  const addRule = () => setAnRules(rs => rs.length < 3 ? [...rs, { dim: "", values: new Set() }] : rs);
+  const addRule = () => setAnRules(rs => rs.length < MAX_AN_RULES ? [...rs, { dim: "", values: new Set() }] : rs);
 
   const toggleExclude = (dim, value) => {
     setAnExclusions(ex => {
@@ -1715,7 +1762,7 @@ function AnalysisTab({ ads, ALL_DIMS_LABELS, METRIC_MAP, anRules, setAnRules, an
           ))}
         </div>
 
-        {anRules.length < 3 && (
+        {anRules.length < MAX_AN_RULES && (
           <button onClick={addRule} style={{ marginTop: 10, padding: "6px 12px", border: "1px dashed #D8C8BC", background: "#fff", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#6B0010" }}>+ Add dimension</button>
         )}
 
