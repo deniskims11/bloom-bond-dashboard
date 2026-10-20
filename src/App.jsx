@@ -1,3 +1,4 @@
+import SpendMix from "./SpendMix.jsx";
 import NvpLedger from "./NvpLedger.jsx";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -1860,6 +1861,8 @@ function AnalysisTab({ ads, ALL_DIMS_LABELS, METRIC_MAP, anRules, setAnRules, an
 
       {activeDims.length > 0 && (
         <>
+          <SpendMix tree={analysisTree} dims={activeDims} labels={ALL_DIMS_LABELS} baselineNc={BASELINE.ncroas}
+            onAds={(name, rows) => openModal(name, `${rows.length} creatives`, rows)} />
           <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "1px solid #E8DCD0", overflowX: "auto" }}>
             <h3 style={{ fontSize: 13, fontWeight: 600, margin: "0 0 4px", color: "#3a2429" }}>Breakdown</h3>
             <p style={{ fontSize: 11, color: "#b0978f", margin: "0 0 10px" }}>Click a row to expand to the next dimension. Click a leaf row to see ad-level data.</p>
