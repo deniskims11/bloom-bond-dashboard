@@ -43,7 +43,7 @@ const derive = (t, total) => ({
   nvp: t.vis ? (t.nv / t.vis) * 100 : null,
 });
 
-export default function NvpLedger({ ads, days, baselineNc = 0, roasLabel = "ROAS" }) {
+export default function NvpLedger({ ads, days, baselineNc = 0, roasLabel = "ROAS", visitorNote = "new visitors ÷ unique visitors (Triple Whale pixel)" }) {
   const products = useMemo(() => {
     const s = new Map();
     for (const a of ads) if (a.product) s.set(a.product, (s.get(a.product) || 0) + (a.metrics?.spend || 0));
@@ -150,7 +150,7 @@ export default function NvpLedger({ ads, days, baselineNc = 0, roasLabel = "ROAS
 
         <h3 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 4px", color: "#3a2429" }}>{rows === "Week" ? "Weekly" : "Daily"} evolution</h3>
         <p style={{ fontSize: 11, color: "#b0978f", margin: "0 0 10px" }}>
-          NVP = new visitors ÷ unique visitors (Triple Whale pixel), worked out per creative per {rows === "Week" ? "week" : "day"}; the creative's spend that {rows === "Week" ? "week" : "day"} lands in its bucket.
+          NVP = {visitorNote}, worked out per creative per {rows === "Week" ? "week" : "day"}; the creative's spend that {rows === "Week" ? "week" : "day"} lands in its bucket.
           NC ROAS is green at or above the account baseline ({x2(baselineNc)}), red below. "% tot" = share of that period's spend (incl. creatives with no visitor data).
         </p>
         <div style={{ background: "#fff", border: "1px solid #E8DCD0", borderRadius: 10, overflowX: "auto" }}>
