@@ -4,8 +4,10 @@ on:
   push:
     branches: [main]
   schedule:
-    # Every 4 hours: re-pull the whole window from Triple Whale and republish.
-    - cron: '37 */4 * * *'
+    # Checked hourly because GitHub drops / delays scheduled runs; the gate job
+    # below only rebuilds once the live data is more than 3.5 hours old, so the
+    # dashboard refreshes about every 4 hours even when some runs are skipped.
+    - cron: '23 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -18,7 +20,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.age.outputs.go }}
+    steps:
+      - id: age
+        run: |
+          if [ "${{ github.event_name }}" != "schedule" ]; then echo "go=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          ts=$(curl -fsS "https://deniskims11.github.io/bloom-bond-dashboard/data/latest.json?t=$(date +%s)" \
+            | python3 -c "import json,sys,datetime;print(int(datetime.datetime.fromisoformat(json.load(sys.stdin)['generated_at']).timestamp()))" || echo 0)
+          age=$(( $(date +%s) - ${ts:-0} ))
+          echo "live data age: $((age / 60)) min"
+          if [ "$age" -gt 12600 ]; then echo "go=true"; else echo "go=false"; fi >> "$GITHUB_OUTPUT"
+
   build:
+    needs: gate
+    if: needs.gate.outputs.go == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
