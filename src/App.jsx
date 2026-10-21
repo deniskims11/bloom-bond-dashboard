@@ -1,3 +1,4 @@
+import DailyView from "./Daily.jsx";
 import SpendMix from "./SpendMix.jsx";
 import NvpLedger from "./NvpLedger.jsx";
 import { useEffect, useMemo, useState } from "react";
@@ -150,8 +151,11 @@ function sortRows(rows, col, dir) {
 }
 
 // --------- Ad list modal (shown when a bucket row is clicked) ---------
-function AdListModal({ open, title, subtitle, ads, onClose }) {
+function AdListModal({ open, title, subtitle, ads, onClose, days, range, initialMode }) {
   const [sort, setSort] = useState({ col: "spend", dir: "desc" });
+  const [mode, setMode] = useState("ads");
+  const [focus, setFocus] = useState(null); // one ad shown by day
+  useEffect(() => { setMode(initialMode || "ads"); setFocus(null); }, [open, title, initialMode]);
   const sortedAds = useMemo(() => {
     if (!ads) return [];
     return ads.slice().sort((a, b) => {
@@ -204,6 +208,15 @@ function AdListModal({ open, title, subtitle, ads, onClose }) {
             <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#50000B" }}>{title}</h3>
             {subtitle && <p style={{ margin: "4px 0 0", fontSize: 12, color: "#8a6f68" }}>{subtitle}</p>}
             <p style={{ margin: "4px 0 0", fontSize: 11, color: "#b0978f" }}>{sortedAds.length.toLocaleString()} ads</p>
+            {days?.length > 0 && (
+              <div style={{ display: "flex", gap: 3, background: "#E8DCD0", borderRadius: 6, padding: 2, marginTop: 8, width: "fit-content" }}>
+                {[["ads", "Ads"], ["daily", "By day"]].map(([k, l]) => (
+                  <button key={k} onClick={() => { setMode(k); setFocus(null); }} style={{ padding: "4px 12px", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 11, fontWeight: 600,
+                    background: mode === k && !focus ? "#fff" : "transparent", color: mode === k && !focus ? "#50000B" : "#8a6f68" }}>{l}</button>
+                ))}
+                {focus && <span style={{ padding: "4px 10px", fontSize: 11, fontWeight: 600, color: "#50000B", background: "#fff", borderRadius: 5, maxWidth: 420, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={focus.ad_name}>By day: {focus.ad_name}</span>}
+              </div>
+            )}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={downloadCsv} style={{ padding: "6px 12px", border: "1px solid #D8C8BC", background: "#fff", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#3a2429" }}>Download CSV ({sortedAds.length})</button>
@@ -211,6 +224,15 @@ function AdListModal({ open, title, subtitle, ads, onClose }) {
           </div>
         </div>
         <div style={{ overflow: "auto", flex: 1 }}>
+          {(mode === "daily" || focus) ? (
+            <div>
+              <p style={{ fontSize: 11, color: "#b0978f", margin: "0 0 8px" }}>
+                {focus ? "This ad" : `All ${sortedAds.length.toLocaleString()} ads in this list`}, day by day for {range?.[0] || days[0]} → {range?.[1] || days[days.length - 1]} (the calendar range at the top). Newest day first.
+                {focus && <> · <span style={{ color: "#6B0010", cursor: "pointer", fontWeight: 600 }} onClick={() => setFocus(null)}>back to ads</span></>}
+              </p>
+              <DailyView ads={focus ? [focus] : ads} days={days} start={range?.[0]} end={range?.[1]} roasLabel={LBL.roas || "ROAS"} hasNc={HAS_NC} />
+            </div>
+          ) : (<>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
             <thead style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>
               <tr style={{ borderBottom: "2px solid #E8DCD0" }}>
@@ -235,7 +257,9 @@ function AdListModal({ open, title, subtitle, ads, onClose }) {
                   : `Open in Ads Manager (Meta login required). Ad ID: ${adIds[0] || "?"}`;
                 return (
                   <tr key={i} style={{ borderBottom: "1px solid #F5EDE5" }}>
-                    <td style={{ ...td, fontSize: 10, fontFamily: "ui-monospace, monospace", maxWidth: 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.ad_name}>{a.ad_name}</td>
+                    <td style={{ ...td, fontSize: 10, fontFamily: "ui-monospace, monospace", maxWidth: 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.ad_name}>
+                      {days?.length > 0 && <button onClick={() => setFocus(a)} title="This ad by day" style={{ border: "1px solid #E8DCD0", background: "#fff", borderRadius: 4, cursor: "pointer", fontSize: 10, padding: "1px 5px", marginRight: 6 }}>📈</button>}
+                      {a.ad_name}</td>
                     <td style={{ ...td, textAlign: "center", width: 72 }}>
                       {a.thumbnail_url && previewUrl ? (
                         <a href={previewUrl} target="_blank" rel="noopener noreferrer" title={previewTitle} style={{ display: "inline-block", lineHeight: 0 }}>
@@ -281,6 +305,7 @@ function AdListModal({ open, title, subtitle, ads, onClose }) {
             </tbody>
           </table>
           {sortedAds.length > 500 && <p style={{ fontSize: 11, color: "#b0978f", marginTop: 12, textAlign: "center" }}>Showing top 500 — CSV export includes all {sortedAds.length.toLocaleString()}.</p>}
+          </>)}
         </div>
       </div>
     </div>
@@ -472,7 +497,7 @@ export default function Dashboard() {
 
   // Global modal state (shared across tabs)
   const [modalState, setModalState] = useState({ open: false, title: "", subtitle: "", ads: [] });
-  const openModal = (title, subtitle, ads) => setModalState({ open: true, title, subtitle, ads });
+  const openModal = (title, subtitle, ads, mode) => setModalState({ open: true, title, subtitle, ads, mode });
   const closeModal = () => setModalState(s => ({ ...s, open: false }));
 
   useEffect(() => {
@@ -1278,7 +1303,8 @@ export default function Dashboard() {
         )}
       </div>
 
-      <AdListModal open={modalState.open} title={modalState.title} subtitle={modalState.subtitle} ads={modalState.ads} onClose={closeModal} />
+      <AdListModal open={modalState.open} title={modalState.title} subtitle={modalState.subtitle} ads={modalState.ads} onClose={closeModal}
+        days={manifest?.days} range={[isoOf(dateStart), isoOf(dateEnd)]} initialMode={modalState.mode} />
       <PatModal open={patModalOpen} onSave={handlePatSaved} onSkip={handlePatSkipped} onClose={() => setPatModalOpen(false)} />
       {categoryInspector && (
         <CategoryMembersModal
@@ -1604,7 +1630,7 @@ function ValuePicker({ ads, dim, selected, onToggle, onClear }) {
 }
 
 // -------- Tree table with expand/collapse + leaf drilldown --------
-function TreeTable({ nodes, dimLabels, onLeafClick }) {
+function TreeTable({ nodes, dimLabels, onLeafClick, onDaily }) {
   const [expanded, setExpanded] = useState(new Set());
   const [sortCol, setSortCol] = useState("spend");
   const [sortDir, setSortDir] = useState("desc");
@@ -1672,6 +1698,8 @@ function TreeTable({ nodes, dimLabels, onLeafClick }) {
               <span style={{ display: "inline-block", width: 14, color: "#b0978f" }}>{!r.isLeaf ? (r.isOpen ? "▼" : "▶") : "•"}</span>
               {r.n.value}
               <span style={{ fontSize: 10, color: "#b0978f", marginLeft: 6 }}>({r.n.agg.count})</span>
+              {onDaily && <button onClick={e => { e.stopPropagation(); onDaily(r.n, r.path); }} title="By day"
+                style={{ marginLeft: 8, border: "1px solid #E8DCD0", background: "#fff", borderRadius: 4, cursor: "pointer", fontSize: 10, padding: "1px 5px" }}>📈</button>}
             </td>
             <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtNum(r.n.agg.count)}</td>
             <td style={{ ...td, textAlign: "right", fontWeight: 500 }}>{fmt(r.n.agg.spend)}</td>
@@ -1870,6 +1898,7 @@ function AnalysisTab({ ads, ALL_DIMS_LABELS, METRIC_MAP, anRules, setAnRules, an
               nodes={analysisTree}
               dimLabels={activeDims.map(d => ALL_DIMS_LABELS[d])}
               onLeafClick={(node, path) => openModal(path.replaceAll("\u241F", " › "), `${node.agg.count} ads · Spend ${fmt(node.agg.spend)}`, node.ads)}
+              onDaily={(node, path) => openModal(path.replaceAll("\u241F", " › "), `${node.agg.count} ads · Spend ${fmt(node.agg.spend)}`, node.ads, "daily")}
             />
           </div>
         </>
