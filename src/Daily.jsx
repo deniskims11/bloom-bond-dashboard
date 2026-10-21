@@ -65,8 +65,8 @@ export const DAILY_METRICS = [
   { key: "roas", label: "ROAS", color: "#CC6138", fmt: v => `${v.toFixed(2)}x` },
   { key: "ncroas", label: "NCROAS", color: "#0ea5e9", fmt: v => `${v.toFixed(2)}x`, nc: true },
   { key: "cpa", label: "CPA", color: "#d97706", fmt: v => `$${v.toFixed(0)}` },
-  { key: "cpc", label: "CPC", color: "#16a34a", fmt: v => `$${v.toFixed(2)}` },
-  { key: "ctr", label: "CTR", color: "#9333ea", fmt: v => `${v.toFixed(2)}%` },
+  { key: "cpc", label: "CPC (outbound)", color: "#16a34a", fmt: v => `$${v.toFixed(2)}` },
+  { key: "ctr", label: "CTR (outbound)", color: "#9333ea", fmt: v => `${v.toFixed(2)}%` },
   { key: "cvr", label: "CVR", color: "#db2777", fmt: v => `${v.toFixed(2)}%` },
   { key: "cpm", label: "CPM", color: "#475569", fmt: v => `$${v.toFixed(2)}` },
   { key: "aov", label: "AOV", color: "#0d9488", fmt: v => `$${v.toFixed(0)}` },
@@ -150,7 +150,7 @@ export default function DailyView({ ads, days, start, end, roasLabel = "ROAS", h
             <th style={{ ...th, textAlign: "left" }}>{gran === "day" ? "Day" : gran === "week" ? "Week" : "Month"}</th>
             <th style={th}>Spend</th><th style={th}>Revenue</th><th style={th}>{roasLabel}</th>
             {hasNc && <th style={th}>NC rev</th>}{hasNc && <th style={th}>NCROAS</th>}
-            <th style={th}>Orders</th><th style={th}>CVR</th><th style={th}>AOV</th><th style={th}>CPA</th><th style={th}>CTR</th><th style={th}>CPC</th><th style={th}>CPM</th><th style={th}>% New Vis.</th>
+            <th style={th}>Orders</th><th style={th}>CVR</th><th style={th}>AOV</th><th style={th}>CPA</th><th style={th} title="Outbound clicks ÷ impressions">CTR (out)</th><th style={th} title="Spend ÷ outbound clicks">CPC (out)</th><th style={th}>CPM</th><th style={th}>% New Vis.</th>
           </tr>
         </thead>
         <tbody>

@@ -132,7 +132,7 @@ export default function NvpLedger({ ads, days, baselineNc = 0, roasLabel = "ROAS
           <div style={{ background: "#fff", border: "1px solid #E8DCD0", borderTop: "3px solid #8a6f68", borderRadius: 10, padding: 14 }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: "#8a6f68", letterSpacing: 0.4 }}>ALL CREATIVES</div>
             <div style={{ fontSize: 22, fontWeight: 700, color: "#3a2429", margin: "4px 0" }}>{money(totals.all.spend)}</div>
-            <div style={{ fontSize: 12, color: "#8a6f68" }}>NC ROAS <b style={{ color: "#3a2429" }}>{x2(totals.all.ncroas)}</b> · CPC {cpc(totals.all.cpc)}</div>
+            <div style={{ fontSize: 12, color: "#8a6f68" }}>NC ROAS <b style={{ color: "#3a2429" }}>{x2(totals.all.ncroas)}</b> · Outbound CPC {cpc(totals.all.cpc)}</div>
             <div style={{ fontSize: 12, color: "#8a6f68" }}>NVP <b style={{ color: "#3a2429" }}>{pct1(totals.all.nvp)}</b>{totals.noData.spend > 0 && ` · ${money(totals.noData.spend)} no visitor data`}</div>
           </div>
           {BUCKETS.map(b => {
@@ -141,7 +141,7 @@ export default function NvpLedger({ ads, days, baselineNc = 0, roasLabel = "ROAS
               <div key={b.key} style={{ background: "#fff", border: "1px solid #E8DCD0", borderTop: `3px solid ${b.color}`, borderRadius: 10, padding: 14 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: b.color, letterSpacing: 0.4 }}>{b.label.toUpperCase()}</div>
                 <div style={{ fontSize: 22, fontWeight: 700, color: "#3a2429", margin: "4px 0" }}>{money(t.spend)}</div>
-                <div style={{ fontSize: 12, color: "#8a6f68" }}>{pct1(t.share)} of spend · CPC {cpc(t.cpc)}</div>
+                <div style={{ fontSize: 12, color: "#8a6f68" }}>{pct1(t.share)} of spend · Outbound CPC {cpc(t.cpc)}</div>
                 <div style={{ fontSize: 12, color: "#8a6f68" }}>NC ROAS <b style={{ color: ncColor(t.ncroas) }}>{x2(t.ncroas)}</b> · {roasLabel} {x2(t.roas)}</div>
               </div>
             );
@@ -166,7 +166,7 @@ export default function NvpLedger({ ads, days, baselineNc = 0, roasLabel = "ROAS
               <tr style={{ borderBottom: "2px solid #E8DCD0" }}>
                 <th style={{ ...th, borderLeft: "1px solid #E8DCD0" }}>Spend</th>
                 <th style={th}>NC ROAS</th>
-                {BUCKETS.map(b => ["Spend", "% tot", "NC ROAS", "CPC"].map((h, i) => (
+                {BUCKETS.map(b => ["Spend", "% tot", "NC ROAS", "CPC (out)"].map((h, i) => (
                   <th key={b.key + h} style={{ ...th, background: b.bg, borderLeft: i === 0 ? "2px solid #fff" : undefined }}>{h}</th>
                 )))}
               </tr>

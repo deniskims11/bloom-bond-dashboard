@@ -275,7 +275,7 @@ function AdListModal({ open, title, subtitle, ads, onClose, days, range, initial
                 <SortHeader label="Revenue" col="rev" sort={sort} setSort={setSort} />
                 <SortHeader label="ROAS" col="roas" sort={sort} setSort={setSort} />
                 <SortHeader label="% New Cust." col="nc_txns" sort={sort} setSort={setSort} />
-                <SortHeader label="Clicks" col="clicks" sort={sort} setSort={setSort} />
+                <SortHeader label="Outbound clicks" col="clicks" sort={sort} setSort={setSort} />
                 <SortHeader label="Txns" col="txns" sort={sort} setSort={setSort} />
               </tr>
             </thead>

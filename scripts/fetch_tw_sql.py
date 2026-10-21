@@ -102,7 +102,7 @@ def main():
                    sum(channel_reported_conversions) AS meta_conv,
                    sum(new_customer_order_revenue) AS nc_rev, sum(new_customer_orders) AS nc_orders,
                    sum(new_visitors) AS nv, sum(unique_visitors) AS vis,
-                   sum(impressions) AS imps, sum(clicks) AS clk,
+                   sum(impressions) AS imps, sum(outbound_clicks) AS clk,
                    sum(order_revenue) AS px_rev, sum(orders_quantity) AS px_orders
             FROM pixel_joined_tvf()
             WHERE {WHERE} AND event_date BETWEEN '{d}' AND '{ce}'
