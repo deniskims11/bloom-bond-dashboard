@@ -20,8 +20,9 @@ and Pages publishes the build. No data is committed.
 - Revenue / ROAS / purchases: Meta-reported, 7-day click / 1-day view
   (`channel_reported_*`).
 - New-customer revenue / NCROAS, pixel revenue, new-visitor share: Triple Whale
-  pixel, Triple Attribution, lifetime window (the only window with per-ad data
-  for this shop).
+  pixel, Triple Attribution + Views, 7-day window — the closest Triple Whale lens
+  to Meta's 7DC/1DV. Name model + window explicitly in SQL; without them the API
+  returns only the default lifetime rows.
 - The date picker re-totals every metric from daily rows ("spend in period");
   win rates stay launch-cohort based.
 

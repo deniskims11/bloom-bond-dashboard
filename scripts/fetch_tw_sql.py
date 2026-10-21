@@ -6,9 +6,8 @@ so the dashboard refreshes unattended.
 
 Window: CLEAN_START (the first day Triple Whale's per-ad data is complete for
 both ad accounts, incl. new-customer attribution) through today, capped at
-MAX_DAYS. Everything is the lifetime attribution window — the only one carrying
-per-ad pixel / NC data for this shop; Meta's 7DC/1DV numbers are the
-channel_reported_* columns.
+MAX_DAYS. Pixel / new-customer figures use Triple Attribution + Views, 7-day
+window; Meta's own 7DC/1DV numbers are the channel_reported_* columns.
 
 Writes raw/tw_ads.tsv, raw/tw_weekly.csv and raw/tw_daily.csv in the formats
 scripts/build.py reads, then runs the build.
@@ -35,7 +34,11 @@ MAX_DAYS = 180
 LAUNCH_LOOKBACK = "2025-01-01"
 CHUNK_DAYS = 7
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-WHERE = "channel = 'facebook-ads' AND model = 'Triple Attribution' AND attribution_window = 'lifetime'"
+# Closest Triple Whale lens to Meta's 7-day click / 1-day view. The model and
+# window must be named explicitly: without them the SQL API silently returns
+# only the default (lifetime) rows.
+WHERE = ("channel = 'facebook-ads' AND model = 'Triple Attribution + Views' "
+         "AND attribution_window = '7_days'")
 DAILY = ["spend", "meta_rev", "meta_conv", "nc_rev", "nc_orders", "nv", "vis", "imps", "clk", "px_rev", "px_orders"]
 
 

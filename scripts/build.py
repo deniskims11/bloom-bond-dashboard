@@ -13,8 +13,8 @@ Lenses (both stated in the UI):
   * Revenue / ROAS / purchases = Meta-reported (channel_reported_*), i.e. Meta's own
     7-day click / 1-day view attribution as synced into Triple Whale.
   * New-customer revenue / orders, % new, new visitors = Triple Whale pixel,
-    Triple Attribution, lifetime window (the only window TW computes per ad for
-    this shop).
+    Triple Attribution + Views, 7-day window (closest TW lens to Meta's 7DC/1DV;
+    the SQL API needs model + window named explicitly or it returns lifetime).
 
 Two naming conventions are parsed:
   * NEW (definition sheet, data/definitions.csv):
@@ -237,7 +237,7 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
             # Primary lens: Meta-reported (7DC/1DV) revenue and purchases.
             "rev": round(meta_rev, 2), "txns": meta_conv,
             "meta_rev": round(meta_rev, 2), "meta_txns": meta_conv,
-            # Triple Whale pixel, Triple Attribution, lifetime.
+            # Triple Whale pixel, Triple Attribution + Views, 7-day window.
             "pixel_rev": round(px_rev, 2), "pixel_txns": px_orders,
             "nc_rev": round(nc_rev, 2), "nc_txns": nc_orders,
             "ncroas": round(nc_rev / spend, 4) if spend else None,
@@ -306,10 +306,10 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
         "has_nc": True,
         "labels": {"rev": "Revenue (Meta)", "roas": "ROAS (Meta)",
                    "rev_sub": "Meta-reported, 7-day click / 1-day view",
-                   "nc_sub": "TW pixel, Triple Attribution, lifetime"},
+                   "nc_sub": "TW pixel, Triple Attribution + Views, 7-day"},
         "attribution": {"primary": "Meta-reported 7-day click / 1-day view (via Triple Whale)",
-                        "secondary": "New-customer: Triple Whale pixel, Triple Attribution, lifetime window",
-                        "window": "7DC/1DV (Meta) · lifetime (TW NC)"},
+                        "secondary": "New-customer: Triple Whale pixel, Triple Attribution + Views, 7-day window",
+                        "window": "7DC/1DV (Meta) · 7-day + views (TW NC)"},
         "ad_accounts": sorted({a["ad_account"] for a in ads if a["ad_account"]}),
         "weeks": weeks, "days": days, "mature_days": MATURE_DAYS,
         "baseline": {"roas": round(meta / tot, 4), "ncroas": round(nc / tot, 4)},
@@ -318,7 +318,7 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
             f"{share('new'):.0%} of spend is on the new naming convention, {share('old'):.0%} on the old "
             f"key:value names (mapped onto the new Concept / Reason / Angle sheet), {share('untagged'):.0%} unrecognised. "
             "Revenue, ROAS and purchases are Meta-reported (7-day click / 1-day view); new-customer figures "
-            "are the Triple Whale pixel (Triple Attribution, lifetime), so NCROAS and ROAS use different lenses. "
+            "are the Triple Whale pixel (Triple Attribution + Views, 7-day window), the closest Triple Whale lens to Meta's. "
             f"Launch win rates count only creatives first spending inside the window and at least {MATURE_DAYS} days old."
         ),
         "ad_count": len(ads),
