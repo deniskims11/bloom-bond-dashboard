@@ -10,7 +10,7 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 //  • Focus: click a bar (or a slice) to see that group's split as a donut +
 //    ranked table; keep clicking slices to walk down the stacked dimensions.
 
-const PALETTE = ["#6B0010", "#D97706", "#0284C7", "#16A34A", "#9333EA", "#DB2777", "#0D9488",
+const PALETTE = ["#CC6138", "#D97706", "#0284C7", "#16A34A", "#9333EA", "#DB2777", "#0D9488",
   "#CA8A04", "#4F46E5", "#EA580C", "#65A30D", "#475569"];
 const OTHER = "#CBBFB6";
 const UNTAGGED = "#8F8A86";
@@ -121,9 +121,9 @@ export default function SpendMix({ tree, dims, labels, baselineNc, onAds }) {
         <div style={{ marginTop: 16, paddingTop: 12, borderTop: twoLevel ? "1px solid #E8DCD0" : "none" }}>
           {fnode && (
             <div style={{ fontSize: 12, marginBottom: 8, color: "#8a6f68" }}>
-              <span style={{ cursor: "pointer", color: "#6B0010", fontWeight: 600 }} onClick={() => setFocus([])}>All</span>
+              <span style={{ cursor: "pointer", color: "#CC6138", fontWeight: 600 }} onClick={() => setFocus([])}>All</span>
               {focus.map((v, i) => (
-                <span key={i}> › <span style={{ cursor: "pointer", color: i === focus.length - 1 ? "#3a2429" : "#6B0010", fontWeight: 600 }}
+                <span key={i}> › <span style={{ cursor: "pointer", color: i === focus.length - 1 ? "#3a2429" : "#CC6138", fontWeight: 600 }}
                   onClick={() => setFocus(focus.slice(0, i + 1))}>{v}</span></span>
               ))}
               <span> · split by <b>{labels[childDim] || childDim}</b> · {money(donutNode.agg.spend)}</span>

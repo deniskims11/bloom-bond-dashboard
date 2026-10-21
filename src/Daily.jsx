@@ -38,7 +38,7 @@ export function dailyRows(ads, days, startIso, endIso) {
 
 // Metrics the chart can plot (each on its own scale, like Moby's metric picker).
 export const DAILY_METRICS = [
-  { key: "roas", label: "ROAS", color: "#6B0010", fmt: v => `${v.toFixed(2)}x` },
+  { key: "roas", label: "ROAS", color: "#CC6138", fmt: v => `${v.toFixed(2)}x` },
   { key: "ncroas", label: "NCROAS", color: "#0ea5e9", fmt: v => `${v.toFixed(2)}x`, nc: true },
   { key: "cpa", label: "CPA", color: "#d97706", fmt: v => `$${v.toFixed(0)}` },
   { key: "cpc", label: "CPC", color: "#16a34a", fmt: v => `$${v.toFixed(2)}` },
@@ -106,7 +106,7 @@ export default function DailyView({ ads, days, start, end, roasLabel = "ROAS", h
           </tr>
         </thead>
         <tbody>
-          <tr style={{ background: "#FBF7F4", fontWeight: 700 }}>
+          <tr style={{ background: "#FBF5F0", fontWeight: 700 }}>
             <td style={{ ...td, textAlign: "left" }}>Total ({rows.length} days)</td>
             <td style={td}>{money(tot.spend)}</td><td style={td}>{money(tot.rev)}</td>
             <td style={td}>{x2(tot.spend ? tot.rev / tot.spend : null)}</td>
@@ -124,7 +124,7 @@ export default function DailyView({ ads, days, start, end, roasLabel = "ROAS", h
             <tr key={r.date}>
               <td style={{ ...td, textAlign: "left", fontWeight: 600, color: "#3a2429" }}>{r.date}</td>
               <td style={{ ...td, fontWeight: 600 }}>{money(r.spend)}</td><td style={td}>{money(r.rev)}</td>
-              <td style={{ ...td, color: "#6B0010", fontWeight: 600 }}>{x2(r.roas)}</td>
+              <td style={{ ...td, color: "#CC6138", fontWeight: 600 }}>{x2(r.roas)}</td>
               {hasNc && <td style={td}>{money(r.nc_rev)}</td>}{hasNc && <td style={{ ...td, color: "#0369a1", fontWeight: 600 }}>{x2(r.ncroas)}</td>}
               <td style={td}>{Math.round(r.orders).toLocaleString()}</td><td style={td}>{pct(r.cvr)}</td><td style={td}>{r.aov == null ? "—" : money(r.aov)}</td><td style={td}>{r.cpa == null ? "—" : money(r.cpa)}</td>
               <td style={td}>{pct(r.ctr)}</td><td style={td}>{r.cpc == null ? "—" : `$${r.cpc.toFixed(2)}`}</td>

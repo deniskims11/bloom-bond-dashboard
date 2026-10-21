@@ -17,7 +17,7 @@ const fmtNum = (n) => n == null ? "—" : Number(n).toLocaleString();
 const fmtPct = (n) => n == null ? "—" : `${Number(n).toFixed(1)}%`;
 
 const MAX_AN_RULES = 8;
-const DEPTH_BG = ["transparent", "#FBF7F4", "#F5EDE5", "#EFE3D8", "#E9DACD"];
+const DEPTH_BG = ["transparent", "#FBF5F0", "#F5EDE5", "#EFE3D8", "#E9DACD"];
 const depthBg = (d) => DEPTH_BG[Math.min(d, DEPTH_BG.length - 1)];
 const TABS = ["Overview", "Win Rate", "Concepts", "Reasons", "Angles", "Avatars", "Formats", "NVP Buckets", "Breakdowns", "Analysis", "Data Clean Up"];
 const THRESHOLDS = ["$1K", "$5K", "$15K", "$25K", "$50K", "$100K", "$150K+"];
@@ -129,7 +129,7 @@ function SortHeader({ label, col, sort, setSort, align = "right" }) {
   return (
     <th
       onClick={onClick}
-      style={{ ...th, textAlign: align, cursor: "pointer", userSelect: "none", color: active ? "#50000B" : "#8a6f68" }}
+      style={{ ...th, textAlign: align, cursor: "pointer", userSelect: "none", color: active ? "#3A1B11" : "#8a6f68" }}
       title="Click to sort"
     >
       {label} {arrow}
@@ -205,22 +205,22 @@ function AdListModal({ open, title, subtitle, ads, onClose, days, range, initial
       <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 12, padding: 20, width: "min(1100px, 100%)", maxHeight: "85vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 40px rgba(0,0,0,0.2)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#50000B" }}>{title}</h3>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#3A1B11" }}>{title}</h3>
             {subtitle && <p style={{ margin: "4px 0 0", fontSize: 12, color: "#8a6f68" }}>{subtitle}</p>}
             <p style={{ margin: "4px 0 0", fontSize: 11, color: "#b0978f" }}>{sortedAds.length.toLocaleString()} ads</p>
             {days?.length > 0 && (
               <div style={{ display: "flex", gap: 3, background: "#E8DCD0", borderRadius: 6, padding: 2, marginTop: 8, width: "fit-content" }}>
                 {[["ads", "Ads"], ["daily", "By day"]].map(([k, l]) => (
                   <button key={k} onClick={() => { setMode(k); setFocus(null); }} style={{ padding: "4px 12px", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 11, fontWeight: 600,
-                    background: mode === k && !focus ? "#fff" : "transparent", color: mode === k && !focus ? "#50000B" : "#8a6f68" }}>{l}</button>
+                    background: mode === k && !focus ? "#fff" : "transparent", color: mode === k && !focus ? "#3A1B11" : "#8a6f68" }}>{l}</button>
                 ))}
-                {focus && <span style={{ padding: "4px 10px", fontSize: 11, fontWeight: 600, color: "#50000B", background: "#fff", borderRadius: 5, maxWidth: 420, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={focus.ad_name}>By day: {focus.ad_name}</span>}
+                {focus && <span style={{ padding: "4px 10px", fontSize: 11, fontWeight: 600, color: "#3A1B11", background: "#fff", borderRadius: 5, maxWidth: 420, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={focus.ad_name}>By day: {focus.ad_name}</span>}
               </div>
             )}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={downloadCsv} style={{ padding: "6px 12px", border: "1px solid #D8C8BC", background: "#fff", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#3a2429" }}>Download CSV ({sortedAds.length})</button>
-            <button onClick={onClose} style={{ padding: "6px 12px", border: "none", background: "#50000B", color: "#fff", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Close</button>
+            <button onClick={onClose} style={{ padding: "6px 12px", border: "none", background: "#3A1B11", color: "#fff", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Close</button>
           </div>
         </div>
         <div style={{ overflow: "auto", flex: 1 }}>
@@ -228,7 +228,7 @@ function AdListModal({ open, title, subtitle, ads, onClose, days, range, initial
             <div>
               <p style={{ fontSize: 11, color: "#b0978f", margin: "0 0 8px" }}>
                 {focus ? "This ad" : `All ${sortedAds.length.toLocaleString()} ads in this list`}, day by day for {range?.[0] || days[0]} → {range?.[1] || days[days.length - 1]} (the calendar range at the top). Newest day first.
-                {focus && <> · <span style={{ color: "#6B0010", cursor: "pointer", fontWeight: 600 }} onClick={() => setFocus(null)}>back to ads</span></>}
+                {focus && <> · <span style={{ color: "#CC6138", cursor: "pointer", fontWeight: 600 }} onClick={() => setFocus(null)}>back to ads</span></>}
               </p>
               <DailyView ads={focus ? [focus] : ads} days={days} start={range?.[0]} end={range?.[1]} roasLabel={LBL.roas || "ROAS"} hasNc={HAS_NC} />
             </div>
@@ -282,7 +282,7 @@ function AdListModal({ open, title, subtitle, ads, onClose, days, range, initial
                       ) : a.preview_link ? (
                         <a href={a.preview_link} target="_blank" rel="noopener noreferrer"
                           title={previewTitle}
-                          style={{ color: "#6B0010", textDecoration: "none", fontSize: 10, fontWeight: 600 }}>
+                          style={{ color: "#CC6138", textDecoration: "none", fontSize: 10, fontWeight: 600 }}>
                           Preview ↗
                         </a>
                       ) : managerUrl ? (
@@ -357,7 +357,7 @@ function BreakdownTable({ rows, nameLabel = "Name", onRowClick }) {
       <tbody>
         {sorted.map((r, i) => (
           <tr key={i} onClick={() => onRowClick?.(r)} style={{ borderBottom: "1px solid #F5EDE5", cursor: onRowClick ? "pointer" : "default" }}
-              onMouseEnter={e => onRowClick && (e.currentTarget.style.background = "#FBF7F4")}
+              onMouseEnter={e => onRowClick && (e.currentTarget.style.background = "#FBF5F0")}
               onMouseLeave={e => onRowClick && (e.currentTarget.style.background = "transparent")}>
             <td style={{ ...td, fontWeight: 600 }}>{r.name}</td>
             <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtNum(r.creatives)}</td>
@@ -422,7 +422,7 @@ function WinRateTable({ wrData }) {
                 const d = row.thresholds[t];
                 return (
                   <td key={t} style={{ padding: "6px 6px", textAlign: "center" }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#50000B" }}>{d?.n ?? 0}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#3A1B11" }}>{d?.n ?? 0}</div>
                     <div style={{ fontSize: 10, color: (d?.rate ?? 0) >= 10 ? "#16a34a" : (d?.rate ?? 0) < 2 ? "#dc2626" : "#8a6f68" }}>{(d?.rate ?? 0).toFixed(1)}%</div>
                   </td>
                 );
@@ -430,14 +430,14 @@ function WinRateTable({ wrData }) {
             </tr>
           ))}
           {total && (
-            <tr style={{ borderBottom: "1px solid #F5EDE5", background: "#FBF7F4", fontWeight: 700 }}>
+            <tr style={{ borderBottom: "1px solid #F5EDE5", background: "#FBF5F0", fontWeight: 700 }}>
               <td style={td}>{total.month}</td>
               <td style={{ ...td, textAlign: "right" }}>{total.total.toLocaleString()}</td>
               {wrCols(wrData).map(t => {
                 const d = total.thresholds[t];
                 return (
                   <td key={t} style={{ padding: "6px 6px", textAlign: "center" }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#50000B" }}>{d?.n ?? 0}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#3A1B11" }}>{d?.n ?? 0}</div>
                     <div style={{ fontSize: 10, color: (d?.rate ?? 0) >= 10 ? "#16a34a" : (d?.rate ?? 0) < 2 ? "#dc2626" : "#8a6f68" }}>{(d?.rate ?? 0).toFixed(1)}%</div>
                   </td>
                 );
@@ -848,27 +848,40 @@ export default function Dashboard() {
   };
 
   return (
-    <div style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif", background: "#FAF6F2", minHeight: "100vh", padding: "32px 24px" }}>
-      <div style={{ maxWidth: 1280, margin: "0 auto" }}>
-        <div style={{ borderBottom: "1px solid #E8DCD0", paddingBottom: 18, marginBottom: 22 }}>
-          <h1 style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 32, fontWeight: 500, color: "#1A0205", margin: 0, letterSpacing: -0.5, lineHeight: 1.15 }}>
-            Bloom &amp; Bond Creative Performance
-          </h1>
-          <p style={{ color: "#8a6f68", fontSize: 12, margin: "6px 0 4px", letterSpacing: 0.2 }}>
-            {manifest.period.start.slice(0, 10)} → {manifest.period.end.slice(0, 10)} · {ads.length.toLocaleString()} creatives · Attribution: {manifest.attribution?.primary ?? '—'}
-          </p>
-          <p style={{ color: "#a89089", fontSize: 11, margin: 0 }}>
-            Last refreshed: {new Date(manifest.generated_at).toLocaleString()} · {Object.keys(mappings).length} dims mapped
-          </p>
-        </div>
-
-        {manifest.scope_note && (
-          <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 16, padding: "10px 14px", background: "#FEF6E7", border: "1px solid #F0D9A8", borderRadius: 8 }}>
-            <span style={{ fontSize: 13, lineHeight: 1.2 }}>⚠</span>
-            <div style={{ fontSize: 11, color: "#7a5c20", lineHeight: 1.5 }}>
-              <strong>Scope:</strong> {manifest.scope_note}
+    <div style={{ fontFamily: "var(--font-body)", background: "var(--bb-cream)", minHeight: "100vh" }}>
+      <header style={{ background: "var(--bb-brown)", color: "var(--bb-cream)", padding: "22px 24px 20px", marginBottom: 24 }}>
+        <div style={{ maxWidth: 1280, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
+            <img src={`${import.meta.env.BASE_URL}brand/logo.png`} alt="Bloom & Bond" style={{ height: 34, display: "block" }} />
+            <span style={{ width: 1, height: 30, background: "rgba(250,243,237,0.25)" }} />
+            <div>
+              <div style={{ fontFamily: "var(--font-heading)", fontSize: 22, fontWeight: 500, letterSpacing: -0.2, lineHeight: 1.1 }}>Creative Performance</div>
+              <div style={{ fontSize: 11, color: "rgba(250,243,237,0.65)", marginTop: 3, letterSpacing: 0.3 }}>Meta · Triple Whale · updated every 4 hours</div>
             </div>
           </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {[
+              ["Data", `${manifest.period.start.slice(0, 10)} → ${manifest.period.end.slice(0, 10)}`],
+              ["Creatives", ads.length.toLocaleString()],
+              ["Attribution", "7DC / 1DV"],
+              ["Refreshed", new Date(manifest.generated_at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })],
+            ].map(([k, v]) => (
+              <div key={k} style={{ background: "rgba(250,243,237,0.08)", border: "1px solid rgba(250,243,237,0.16)", borderRadius: 999, padding: "6px 12px", fontSize: 11 }}>
+                <span style={{ color: "rgba(250,243,237,0.6)", marginRight: 6 }}>{k}</span><span style={{ fontWeight: 600 }}>{v}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </header>
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "0 24px 40px" }}>
+
+        {manifest.scope_note && (
+          <details style={{ marginBottom: 16, padding: "10px 14px", background: "#fff", border: "1px solid var(--bb-line)", borderRadius: 10 }}>
+            <summary style={{ fontSize: 12, fontWeight: 600, color: "var(--bb-brown)", cursor: "pointer" }}>
+              About this data <span style={{ fontWeight: 400, color: "var(--bb-muted)" }}>· ROAS = {manifest.attribution?.primary ?? "—"} · NCROAS = {LBL.nc_sub || "TW pixel"}</span>
+            </summary>
+            <div style={{ fontSize: 11, color: "var(--bb-muted)", lineHeight: 1.6, marginTop: 8 }}>{manifest.scope_note}</div>
+          </details>
         )}
 
         <DateRangePicker
@@ -882,15 +895,14 @@ export default function Dashboard() {
           setEnd={setDateEnd}
         />
 
-        <div style={{ display: "flex", gap: 0, marginBottom: 22, borderBottom: "1px solid #E8DCD0", overflowX: "auto" }}>
+        <div style={{ display: "flex", gap: 4, marginBottom: 22, padding: 5, background: "#fff", border: "1px solid var(--bb-line)", borderRadius: 12, overflowX: "auto" }}>
           {TABS.map(t => (
             <button key={t} onClick={() => setTab(t)} style={{
-              padding: "12px 18px", border: "none", borderRadius: 0, cursor: "pointer", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap",
-              letterSpacing: 0.6, textTransform: "uppercase",
-              background: "transparent",
-              color: tab === t ? "#50000B" : "#8a6f68",
-              borderBottom: tab === t ? "2px solid #50000B" : "2px solid transparent",
-              marginBottom: -1, transition: "color 0.15s, border-color 0.15s",
+              padding: "9px 16px", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
+              letterSpacing: 0.2,
+              background: tab === t ? "var(--bb-terracotta)" : "transparent",
+              color: tab === t ? "#fff" : "var(--bb-muted)",
+              transition: "background 0.15s, color 0.15s",
             }}>{t}</button>
           ))}
         </div>
@@ -913,7 +925,7 @@ export default function Dashboard() {
               ].map((kpi, i) => (
                 <div key={i} style={{ background: "#fff", borderRadius: 10, padding: "16px 14px", border: "1px solid #E8DCD0" }}>
                   <div style={{ fontSize: 10, color: "#b0978f", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{kpi.label}</div>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: "#50000B", marginTop: 4 }}>{kpi.value}</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: "#3A1B11", marginTop: 4 }}>{kpi.value}</div>
                   <div style={{ fontSize: 11, color: "#b0978f", marginTop: 2 }}>{kpi.sub}</div>
                 </div>
               ))}
@@ -964,7 +976,7 @@ export default function Dashboard() {
                     <Legend wrapperStyle={{ fontSize: 11 }} />
                     {weeklyMix.keys.map((k, i) => (
                       <Bar key={k} dataKey={k} stackId="mix" name={k}
-                        fill={["#50000B", "#b45309", "#0e7490", "#7c3aed", "#15803d", "#be185d", "#cbb8b0"][i % 7]} />
+                        fill={["#3A1B11", "#b45309", "#0e7490", "#7c3aed", "#15803d", "#be185d", "#cbb8b0"][i % 7]} />
                     ))}
                   </BarChart>
                 </ResponsiveContainer>
@@ -1153,7 +1165,7 @@ export default function Dashboard() {
               {["Funnel (TOF/MOF/BOF)", "Format", "Type", "Reason", "Origin", "Awareness Stage", "Strategist", "Editor", "Writer", "Length", "Persuasion", "Landing Page", "Script", "Launch Status", "Concept × Reason", "Reason × Angle", "Angle × Concept"].map(v => (
                 <button key={v} onClick={() => setBdView(v)} style={{
                   padding: "6px 14px", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 12, fontWeight: 600,
-                  background: bdView === v ? "#fff" : "transparent", color: bdView === v ? "#50000B" : "#8a6f68",
+                  background: bdView === v ? "#fff" : "transparent", color: bdView === v ? "#3A1B11" : "#8a6f68",
                 }}>{v}</button>
               ))}
             </div>
@@ -1227,7 +1239,7 @@ export default function Dashboard() {
                 <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
                   <input type="text" placeholder="Search angle or concept..." value={ccSearch} onChange={e => setCcSearch(e.target.value)}
                     style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #D8C8BC", fontSize: 12, width: 240 }} />
-                  <label style={{ fontSize: 12, color: "#8a6f68" }}>Min spend: <strong style={{ color: "#50000B" }}>{fmt(ccMinSpend)}</strong></label>
+                  <label style={{ fontSize: 12, color: "#8a6f68" }}>Min spend: <strong style={{ color: "#3A1B11" }}>{fmt(ccMinSpend)}</strong></label>
                   <input type="range" min={0} max={500000} step={1000} value={ccMinSpend} onChange={e => setCcMinSpend(+e.target.value)} style={{ width: 200 }} />
                   <span style={{ fontSize: 12, color: "#b0978f" }}>{creatorConceptGroups.length} rows · click to drill in</span>
                 </div>
@@ -1277,7 +1289,7 @@ export default function Dashboard() {
                   {saveState.status === "saving" && <span style={{ fontSize: 11, color: "#8a6f68" }}>Saving…</span>}
                   {savedAt && saveState.status === "idle" && <span style={{ fontSize: 11, color: "#16a34a" }}>Saved {savedAt.toLocaleTimeString()}</span>}
                   <button onClick={saveMappings} disabled={saveState.status === "saving"}
-                    style={{ padding: "6px 14px", border: "none", background: saveState.status === "saving" ? "#b0978f" : "#50000B", color: "#fff", borderRadius: 6, cursor: saveState.status === "saving" ? "wait" : "pointer", fontSize: 12, fontWeight: 600 }}>
+                    style={{ padding: "6px 14px", border: "none", background: saveState.status === "saving" ? "#b0978f" : "#3A1B11", color: "#fff", borderRadius: 6, cursor: saveState.status === "saving" ? "wait" : "pointer", fontSize: 12, fontWeight: 600 }}>
                     Save mappings
                   </button>
                   <button onClick={clearGithubPat} title="Clear saved GitHub token"
@@ -1293,7 +1305,7 @@ export default function Dashboard() {
                     <button key={d} onClick={() => { setCleanDim(d); setCleanSelectedValue(null); }} style={{
                       padding: "4px 10px", border: "1px solid #D8C8BC", borderRadius: 5, cursor: "pointer",
                       fontSize: 12, fontWeight: 600,
-                      background: cleanDim === d ? "#50000B" : "#fff",
+                      background: cleanDim === d ? "#3A1B11" : "#fff",
                       color: cleanDim === d ? "#fff" : "#8a6f68",
                     }}>{d}{mapped > 0 && <span style={{ marginLeft: 4, fontSize: 10, color: cleanDim === d ? "#86efac" : "#16a34a" }}>· {mapped}</span>}</button>
                   );
@@ -1319,7 +1331,7 @@ export default function Dashboard() {
                   <p style={{ fontSize: 11, color: "#b0978f", margin: "0 0 10px" }}>
                     {cleanSampleAds.length} ads · showing 10 ·
                     <button onClick={() => openModal(`${cleanDim}=${cleanSelectedValue}`, `${cleanSampleAds.length} ads`, cleanSampleAds)}
-                      style={{ marginLeft: 6, border: "none", background: "transparent", color: "#6B0010", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>see all / download CSV</button>
+                      style={{ marginLeft: 6, border: "none", background: "transparent", color: "#CC6138", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>see all / download CSV</button>
                   </p>
                   <div style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", color: "#3a2429", maxHeight: 400, overflowY: "auto" }}>
                     {cleanSampleAds.slice(0, 10).map((a, i) => (
@@ -1460,12 +1472,12 @@ function PatModal({ open, onSave, onSkip, onClose }) {
       <div onClick={e => e.stopPropagation()}
         style={{ background: "#fff", borderRadius: 10, width: 480, boxShadow: "0 20px 40px rgba(0,0,0,0.2)" }}>
         <div style={{ padding: "16px 18px", borderBottom: "1px solid #E8DCD0" }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#50000B" }}>Sync mappings to GitHub</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#3A1B11" }}>Sync mappings to GitHub</div>
           <div style={{ fontSize: 12, color: "#8a6f68", marginTop: 4 }}>Paste a GitHub Personal Access Token to push <code>data/mappings.json</code> to the repo. Stored in this browser only.</div>
         </div>
         <div style={{ padding: "14px 18px" }}>
           <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer"
-            style={{ fontSize: 11, color: "#6B0010", textDecoration: "none", fontWeight: 600 }}>Create a fine-grained PAT (repo contents: R&W) →</a>
+            style={{ fontSize: 11, color: "#CC6138", textDecoration: "none", fontWeight: 600 }}>Create a fine-grained PAT (repo contents: R&W) →</a>
           <input
             type="password"
             autoFocus
@@ -1483,7 +1495,7 @@ function PatModal({ open, onSave, onSkip, onClose }) {
             Skip (download JSON)
           </button>
           <button onClick={submit} disabled={!pat.trim()}
-            style={{ padding: "6px 14px", border: "none", background: pat.trim() ? "#50000B" : "#D8C8BC", color: "#fff", borderRadius: 6, cursor: pat.trim() ? "pointer" : "not-allowed", fontSize: 12, fontWeight: 600 }}>
+            style={{ padding: "6px 14px", border: "none", background: pat.trim() ? "#3A1B11" : "#D8C8BC", color: "#fff", borderRadius: 6, cursor: pat.trim() ? "pointer" : "not-allowed", fontSize: 12, fontWeight: 600 }}>
             Save & push to GitHub
           </button>
         </div>
@@ -1512,7 +1524,7 @@ function CategoryMembersModal({ dim, target, mappings, values, onRemove, onClose
         style={{ background: "#fff", borderRadius: 10, width: 520, maxHeight: "80vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 40px rgba(0,0,0,0.2)" }}>
         <div style={{ padding: "14px 16px", borderBottom: "1px solid #E8DCD0" }}>
           <div style={{ fontSize: 11, color: "#b0978f", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.3 }}>Master category · {dim}</div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#50000B", fontFamily: "ui-monospace, monospace" }}>{target}</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#3A1B11", fontFamily: "ui-monospace, monospace" }}>{target}</div>
           <div style={{ fontSize: 11, color: "#8a6f68", marginTop: 2 }}>{members.length} member{members.length !== 1 ? "s" : ""} · {fmtNum(totals.n)} ads · {fmt(totals.spend)}</div>
         </div>
         <div style={{ overflowY: "auto", flex: 1 }}>
@@ -1536,7 +1548,7 @@ function CategoryMembersModal({ dim, target, mappings, values, onRemove, onClose
         </div>
         <div style={{ padding: "10px 14px", borderTop: "1px solid #E8DCD0", display: "flex", justifyContent: "flex-end" }}>
           <button onClick={onClose}
-            style={{ padding: "6px 14px", border: "none", background: "#50000B", color: "#fff", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Close</button>
+            style={{ padding: "6px 14px", border: "none", background: "#3A1B11", color: "#fff", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Close</button>
         </div>
       </div>
     </div>
@@ -1560,7 +1572,7 @@ function EditCategoryModal({ value, current, categories, onSave, onClose }) {
         style={{ background: "#fff", borderRadius: 10, width: 420, maxHeight: "80vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 40px rgba(0,0,0,0.2)" }}>
         <div style={{ padding: "14px 16px", borderBottom: "1px solid #E8DCD0" }}>
           <div style={{ fontSize: 11, color: "#b0978f", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.3 }}>Reclassify</div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#50000B", fontFamily: "ui-monospace, monospace", marginTop: 2, wordBreak: "break-all" }}>{value}</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#3A1B11", fontFamily: "ui-monospace, monospace", marginTop: 2, wordBreak: "break-all" }}>{value}</div>
           {current && <div style={{ fontSize: 11, color: "#8a6f68", marginTop: 4 }}>Currently mapped to <strong style={{ color: "#166534" }}>{current}</strong></div>}
         </div>
         <div style={{ padding: "10px 12px", borderBottom: "1px solid #E8DCD0" }}>
@@ -1571,7 +1583,7 @@ function EditCategoryModal({ value, current, categories, onSave, onClose }) {
           {filtered.map(c => (
             <div key={c} onClick={() => onSave(c)}
               style={{ padding: "8px 14px", fontSize: 12, fontFamily: "ui-monospace, monospace", cursor: "pointer", borderBottom: "1px solid #F5EDE5", background: c === current ? "#FDE9BF" : "transparent", display: "flex", alignItems: "center", gap: 6 }}
-              onMouseEnter={e => e.currentTarget.style.background = "#FBF7F4"}
+              onMouseEnter={e => e.currentTarget.style.background = "#FBF5F0"}
               onMouseLeave={e => e.currentTarget.style.background = c === current ? "#FDE9BF" : "transparent"}>
               {c === current && <span style={{ color: "#16a34a", fontSize: 11 }}>✓</span>}
               <span>{c}</span>
@@ -1586,7 +1598,7 @@ function EditCategoryModal({ value, current, categories, onSave, onClose }) {
                 onKeyDown={e => { if (e.key === "Enter" && newName.trim()) onSave(newName.trim()); }}
                 style={{ flex: 1, padding: "6px 10px", borderRadius: 6, border: "1px solid #D8C8BC", fontSize: 12, fontFamily: "ui-monospace, monospace" }} />
               <button onClick={() => newName.trim() && onSave(newName.trim())}
-                style={{ padding: "6px 12px", border: "none", background: "#50000B", color: "#fff", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Save</button>
+                style={{ padding: "6px 12px", border: "none", background: "#3A1B11", color: "#fff", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Save</button>
               <button onClick={() => { setCreating(false); setNewName(""); }}
                 style={{ padding: "6px 10px", border: "1px solid #D8C8BC", background: "#fff", color: "#8a6f68", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>Cancel</button>
             </>
@@ -1623,9 +1635,9 @@ function ValuePicker({ ads, dim, selected, onToggle, onClear }) {
         ) : (
           <>
             {selArr.slice(0, 4).map(v => (
-              <span key={v} style={{ fontSize: 11, background: "#FDE9BF", color: "#50000B", padding: "2px 6px", borderRadius: 4, display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <span key={v} style={{ fontSize: 11, background: "#FDE9BF", color: "#3A1B11", padding: "2px 6px", borderRadius: 4, display: "inline-flex", alignItems: "center", gap: 4 }}>
                 {v}
-                <button onClick={e => { e.stopPropagation(); onToggle(v); }} style={{ border: "none", background: "transparent", color: "#50000B", cursor: "pointer", padding: 0, fontSize: 12 }}>×</button>
+                <button onClick={e => { e.stopPropagation(); onToggle(v); }} style={{ border: "none", background: "transparent", color: "#3A1B11", cursor: "pointer", padding: 0, fontSize: 12 }}>×</button>
               </span>
             ))}
             {selArr.length > 4 && <span style={{ fontSize: 11, color: "#8a6f68" }}>+{selArr.length - 4} more</span>}
@@ -1652,7 +1664,7 @@ function ValuePicker({ ads, dim, selected, onToggle, onClear }) {
           </div>
           <div style={{ padding: 8, borderTop: "1px solid #E8DCD0", background: "#fff", display: "flex", justifyContent: "flex-end", gap: 6 }}>
             <button onClick={() => setOpen(false)}
-              style={{ padding: "6px 16px", border: "none", background: "#50000B", color: "#fff", borderRadius: 6, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>
+              style={{ padding: "6px 16px", border: "none", background: "#3A1B11", color: "#fff", borderRadius: 6, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>
               Select{selArr.length > 0 ? ` (${selArr.length})` : ""}
             </button>
           </div>
@@ -1677,7 +1689,7 @@ function TreeTable({ nodes, dimLabels, onLeafClick, onDaily, tendency, prevMap, 
     const active = sortCol === col;
     return (
       <th key={col} onClick={() => { if (active) setSortDir(d => d === "desc" ? "asc" : "desc"); else { setSortCol(col); setSortDir("desc"); } }}
-        style={{ ...th, textAlign: align, cursor: "pointer", userSelect: "none", color: active ? "#50000B" : "#8a6f68" }}>
+        style={{ ...th, textAlign: align, cursor: "pointer", userSelect: "none", color: active ? "#3A1B11" : "#8a6f68" }}>
         {label} {active && (sortDir === "desc" ? "↓" : "↑")}
       </th>
     );
@@ -1860,7 +1872,7 @@ function AnalysisTab({ ads, prevInfo, days, range, ALL_DIMS_LABELS, METRIC_MAP, 
         </div>
 
         {anRules.length < MAX_AN_RULES && (
-          <button onClick={addRule} style={{ marginTop: 10, padding: "6px 12px", border: "1px dashed #D8C8BC", background: "#fff", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#6B0010" }}>+ Add dimension</button>
+          <button onClick={addRule} style={{ marginTop: 10, padding: "6px 12px", border: "1px dashed #D8C8BC", background: "#fff", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#CC6138" }}>+ Add dimension</button>
         )}
 
         {/* Controls row */}
@@ -1891,7 +1903,7 @@ function AnalysisTab({ ads, prevInfo, days, range, ALL_DIMS_LABELS, METRIC_MAP, 
             </select>
           </div>
           <div style={{ fontSize: 11, color: "#8a6f68" }}>
-            <strong style={{ color: "#50000B" }}>{analysisTree.length}</strong> top-level groups
+            <strong style={{ color: "#3A1B11" }}>{analysisTree.length}</strong> top-level groups
           </div>
         </div>
 
@@ -1918,7 +1930,7 @@ function AnalysisTab({ ads, prevInfo, days, range, ALL_DIMS_LABELS, METRIC_MAP, 
             const excludedCount = anExclusions[expandedExcludeDim]?.size || 0;
             const allSelected = excludedCount >= allExcludeValues.length && allExcludeValues.length > 0;
             return (
-              <div style={{ marginTop: 10, padding: 10, background: "#FBF7F4", borderRadius: 6, maxHeight: 280, overflowY: "auto" }}>
+              <div style={{ marginTop: 10, padding: 10, background: "#FBF5F0", borderRadius: 6, maxHeight: 280, overflowY: "auto" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
                   <div style={{ fontSize: 11, color: "#8a6f68" }}>Check values to exclude from <strong>{ALL_DIMS_LABELS[expandedExcludeDim]}</strong>:</div>
                   <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
@@ -1965,7 +1977,7 @@ function AnalysisTab({ ads, prevInfo, days, range, ALL_DIMS_LABELS, METRIC_MAP, 
               {[["Tendency", tendency, setTendency, prevInfo ? `vs previous period ${prevInfo.label}${prevInfo.empty ? " (no data)" : ""}` : "pick a date range (spend in period) to compare"],
                 ["Timeline view", timeline, setTimeline, "expand any row to see it day by day"]].map(([label, on, set, hint]) => (
                 <label key={label} title={hint} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: "#3a2429", cursor: "pointer" }}>
-                  <span onClick={() => set(!on)} style={{ width: 30, height: 16, borderRadius: 8, background: on ? "#6B0010" : "#D8C8BC", position: "relative", transition: "background .15s" }}>
+                  <span onClick={() => set(!on)} style={{ width: 30, height: 16, borderRadius: 8, background: on ? "#CC6138" : "#D8C8BC", position: "relative", transition: "background .15s" }}>
                     <span style={{ position: "absolute", top: 2, left: on ? 16 : 2, width: 12, height: 12, borderRadius: 6, background: "#fff", transition: "left .15s" }} />
                   </span>
                   <span onClick={() => set(!on)}>{label}</span>
