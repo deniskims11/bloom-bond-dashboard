@@ -972,8 +972,8 @@ export default function Dashboard() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#F5EDE5" />
                     <XAxis dataKey="week" tick={{ fontSize: 11, fill: "#b0978f" }} />
                     <YAxis tick={{ fontSize: 11, fill: "#b0978f" }} tickFormatter={v => `${Math.round(v * 100)}%`} />
-                    <Tooltip formatter={(v) => fmtFull(v)} />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Tooltip formatter={(v) => fmtFull(v)} itemSorter={(it) => (it.name === "Other" ? Infinity : -(it.value || 0))} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} itemSorter={(it) => weeklyMix.keys.indexOf(it.value)} />
                     {weeklyMix.keys.map((k, i) => (
                       <Bar key={k} dataKey={k} stackId="mix" name={k}
                         fill={["#3A1B11", "#b45309", "#0e7490", "#7c3aed", "#15803d", "#be185d", "#cbb8b0"][i % 7]} />
