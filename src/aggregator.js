@@ -160,8 +160,10 @@ export function winRate(ads, formatFilter = "blended", strategistFilter = "all")
         };
       }
       const eff = monthAds.filter(isEfficientWin).length;
-      thresholds["Efficient"] = { n: eff, rate: monthAds.length ? (eff / monthAds.length) * 100 : 0 };
-      return { month, total: monthAds.length, thresholds };
+      const hist = monthAds.every((a) => a.history);
+      // Meta history months have no new-customer data, so "efficient" is unknown there.
+      thresholds["Efficient"] = hist ? { n: null, rate: null } : { n: eff, rate: monthAds.length ? (eff / monthAds.length) * 100 : 0 };
+      return { month, total: monthAds.length, thresholds, history: hist };
     });
 
   const totalThresholds = {};

@@ -416,10 +416,11 @@ function WinRateTable({ wrData }) {
         <tbody>
           {rows.map((row, i) => (
             <tr key={i} style={{ borderBottom: "1px solid #F5EDE5" }}>
-              <td style={td}>{row.month}</td>
+              <td style={td}>{row.month}{row.history && <span title="Launch cohort from the Meta Ads Manager export (before Triple Whale data starts); later spend added from Triple Whale" style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, color: "#CC6138", border: "1px solid #EBDDD0", borderRadius: 4, padding: "0 4px" }}>META</span>}</td>
               <td style={{ ...td, textAlign: "right" }}>{row.total.toLocaleString()}</td>
               {wrCols(wrData).map(t => {
                 const d = row.thresholds[t];
+                if (d && d.n == null) return <td key={t} style={{ padding: "6px 6px", textAlign: "center", color: "#b0978f", fontSize: 11 }} title="Meta history has no new-customer data">—</td>;
                 return (
                   <td key={t} style={{ padding: "6px 6px", textAlign: "center" }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "#3A1B11" }}>{d?.n ?? 0}</div>
@@ -567,7 +568,10 @@ export default function Dashboard() {
     ? weeklyFromDaily(ads, manifest.days, wkRange[0], wkRange[1], wkDim, 6)
     : weekly(ads, manifest?.weeks, wkDim, 6)), [ads, manifest, canActivity, wkDim, wkRange[0], wkRange[1]]);
   // Win rates are launch-cohort metrics, so the activity-date filter doesn't apply.
-  const wrAds = useMemo(() => (dateMode === "activity" && canActivity ? (manifest?.ads ?? []) : ads), [ads, manifest, dateMode, canActivity]);
+  // Win rates are launch cohorts: current-window creatives plus the Meta history
+  // (launches before the Triple Whale window, spend = Meta before it + TW after).
+  const wrAds = useMemo(() => (dateMode === "activity" && canActivity ? (manifest?.ads ?? []) : ads).concat(manifest?.history_ads ?? []),
+    [ads, manifest, dateMode, canActivity]);
   const wrData = useMemo(() => winRate(wrAds, wrFormat, wrStrategist), [wrAds, wrFormat, wrStrategist]);
   const strategistList = useMemo(
     () => Array.from(new Set(ads.map(a => a.strategist).filter(Boolean))).sort(),
@@ -1040,6 +1044,7 @@ export default function Dashboard() {
                   <strong>How these are counted.</strong> A launch is a creative whose first-ever spend day falls inside the window and that is at least {manifest.mature_days ?? 14} days old,
                   so carry-over ads ({fmtNum(ads.filter(a => a.carry_over).length)}) and ads too new to judge ({fmtNum(ads.filter(a => !a.carry_over && a.mature === false).length)}) are left out.
                   Thresholds are lifetime-in-window spend. <strong>Efficient</strong> = spent $1K+ and beat the account NCROAS ({(BASELINE.ncroas).toFixed(2)}x).
+                  {(manifest.history_ads?.length > 0) && <> Months tagged <strong>META</strong> are launches from before the Triple Whale data starts, taken from the Meta Ads Manager export: spend = Meta spend up to {manifest.period.start} plus Triple Whale spend since (lifetime to date); no new-customer data, so no Efficient column for them.</>}
                 </div>
               </div>
             )}

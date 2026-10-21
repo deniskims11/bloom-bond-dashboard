@@ -181,6 +181,41 @@ def parse_old(name, legacy):
 
 
 # ---------------------------------------------------------------- build
+HISTORY_MONTHS = 6  # win-rate history shown, counting back from the window's end month
+
+
+def meta_history_ads(ads, codes, legacy, start):
+    """Win-rate cohort records for creatives launched before the TW window."""
+    path = ROOT / "data" / "meta_history.json"
+    if not path.exists():
+        return []
+    h = json.loads(path.read_text())
+    tw = {a["ad_name"]: a for a in ads}
+    end_m = datetime.now(timezone.utc)
+    y, m = end_m.year, end_m.month - (HISTORY_MONTHS - 1)
+    while m <= 0:
+        m += 12; y -= 1
+    first = f"{y}-{m:02d}"
+    out = []
+    for c in h["creatives"]:
+        lm = c["launch_month"]
+        if c.get("censored") or lm < first or lm >= start[:7]:
+            continue
+        later = tw.get(c["ad_name"], {}).get("metrics", {})
+        tags = parse_new(c["ad_name"], codes) or parse_old(c["ad_name"], legacy) or {}
+        spend = c["spend"] + (later.get("spend") or 0)
+        out.append({
+            "ad_name": c["ad_name"], "history": True, "carry_over": False, "mature": True,
+            "date": lm[2:4] + lm[5:7] + "01", "launch_date": lm + "-01",
+            "format": tags.get("format"), "type": tags.get("type"), "strategist": tags.get("strategist"),
+            "concept": tags.get("concept"), "reason": tags.get("reason"), "angle": tags.get("angle"),
+            "meta_ad_ids": c.get("ad_ids", []),
+            "metrics": {"spend": round(spend, 2), "rev": round(c["rev"] + (later.get("meta_rev") or 0), 2),
+                        "txns": c["txns"] + (later.get("meta_txns") or 0), "ncroas": None},
+        })
+    return out
+
+
 def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=None):
     codes, _ = load_definitions(defs_path)
     legacy = json.loads(pathlib.Path(legacy_path).read_text())
@@ -314,6 +349,7 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
     ads.sort(key=lambda a: -a["metrics"]["spend"])
     for i, a in enumerate(ads, 1):
         a["spend_rank"] = i
+    history = meta_history_ads(ads, codes, legacy, start)
     tot = sum(a["metrics"]["spend"] for a in ads) or 1
     share = lambda c: sum(a["metrics"]["spend"] for a in ads if a["convention"] == c) / tot
     meta = sum(a["metrics"]["meta_rev"] for a in ads)
@@ -344,6 +380,9 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
         ),
         "ad_count": len(ads),
         "ads": ads,
+        # Launch-cohort records from the Meta export (before the TW window), used
+        # only by the Win Rate tab; spend = Meta before `start` + TW from `start`.
+        "history_ads": history,
     }
 
 
