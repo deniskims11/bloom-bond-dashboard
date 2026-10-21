@@ -601,7 +601,7 @@ export default function Dashboard() {
   const launchStatuses = useMemo(() => toBreakdownRows(groupBy(ads, "launch_status")), [ads]);
   // Generic one-dimension breakdowns (Bloom & Bond naming fields).
   const EXTRA_BD = { "Reason": "reason", "Origin": "origin", "Type": "type", "Length": "length",
-    "Persuasion": "persuasion", "Editor": "editor", "Writer": "writer", "Landing Page": "landing_page" };
+    "Persuasion": "persuasion", "Editor": "editor", "Writer": "writer", "Creator": "creator", "Landing Page": "landing_page" };
   const extraRows = useMemo(
     () => (EXTRA_BD[bdView] ? toBreakdownRows(groupBy(ads, EXTRA_BD[bdView])) : []),
     [ads, bdView]
@@ -821,7 +821,7 @@ export default function Dashboard() {
   const ALL_DIMS_LABELS = {
     angle: "Angle", reason: "Reason", concept: "Concept", icp: "Avatar",
     origin: "Origin", type: "Type", length: "Length", persuasion: "Persuasion",
-    writer: "Writer", editor: "Editor", landing_page: "Landing Page", static_type: "Static Type",
+    writer: "Writer", creator: "Creator", editor: "Editor", landing_page: "Landing Page", static_type: "Static Type",
     script: "Script / Hook", format: "Format", awareness_stage: "Awareness Stage",
     product: "Product", creative_no: "Ad Number", buying_type: "Buying Type",
     batch: "Batch", attribution_window: "Attribution Window", geo: "Geo",
@@ -1162,7 +1162,7 @@ export default function Dashboard() {
         {tab === "Breakdowns" && (
           <div>
             <div style={{ display: "flex", gap: 3, background: "#E8DCD0", borderRadius: 6, padding: 2, marginBottom: 16, width: "fit-content", flexWrap: "wrap" }}>
-              {["Funnel (TOF/MOF/BOF)", "Format", "Type", "Reason", "Origin", "Awareness Stage", "Strategist", "Editor", "Writer", "Length", "Persuasion", "Landing Page", "Script", "Launch Status", "Concept × Reason", "Reason × Angle", "Angle × Concept"].map(v => (
+              {["Funnel (TOF/MOF/BOF)", "Format", "Type", "Reason", "Origin", "Awareness Stage", "Strategist", "Editor", "Writer", "Creator", "Length", "Persuasion", "Landing Page", "Script", "Launch Status", "Concept × Reason", "Reason × Angle", "Angle × Concept"].map(v => (
                 <button key={v} onClick={() => setBdView(v)} style={{
                   padding: "6px 14px", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 12, fontWeight: 600,
                   background: bdView === v ? "#fff" : "transparent", color: bdView === v ? "#3A1B11" : "#8a6f68",

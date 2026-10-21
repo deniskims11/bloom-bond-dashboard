@@ -301,6 +301,7 @@ export const DIMENSIONS = [
   "persuasion",
   "editor",
   "writer",
+  "creator",
   "landing_page",
 ];
 

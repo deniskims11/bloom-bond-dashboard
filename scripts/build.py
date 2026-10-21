@@ -112,6 +112,25 @@ def parse_new(name, codes):
 TAG_RE = re.compile(r"(?:^|_)(LP|PC|OR|LN|AV|SOA|AG|ST|FR|DES|CS|WR|ED|CR):")
 
 
+AD_BOUNTY_RE = re.compile(r"Ad Bounty\s*-\s*([^-]+?)\s*-\s*CREATOR", re.I)
+TRYBE_RE = re.compile(r"^([A-Z][a-z]+(?:[A-Z][a-z]+)+)_.*trybe=", re.I)
+
+
+def creator_of(name, tagged):
+    """Creator / talent: the old CR: tag, else creator-platform names
+    ("… Ad Bounty - Jane Doe - CREATOR-…", "JaneDoe_PumpkinSeedOil…_trybe=…")."""
+    v = (tagged or "").split(",")[0].strip(" @:")
+    if v and not v.isdigit():
+        return v
+    m = AD_BOUNTY_RE.search(name or "")
+    if m:
+        return m.group(1).strip()
+    m = TRYBE_RE.match(name or "")
+    if m:
+        return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", m.group(1))
+    return None
+
+
 def parse_old(name, legacy):
     """Old key:value convention."""
     if "SOA:" not in name and "AG:" not in name:
@@ -156,6 +175,7 @@ def parse_old(name, legacy):
         "length": (tags.get("LN") or "").replace("Short-From", "Short-Form") or None,
         "persuasion": tags.get("PC") or None, "static_type": (tags.get("ST") or "").rstrip("+") or None,
         "strategist": who(tags.get("CS")), "writer": who(tags.get("WR")), "editor": who(tags.get("ED")),
+        "creator": who(tags.get("CR")),
         "landing_page": lp,
     }
 
@@ -270,6 +290,7 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
             "funnel": FUNNEL_OF.get(aw), "length": tags.get("length"),
             "persuasion": tags.get("persuasion"), "static_type": tags.get("static_type"),
             "strategist": tags.get("strategist"), "writer": tags.get("writer"), "editor": tags.get("editor"),
+            "creator": creator_of(key, tags.get("creator")),
             "landing_page": tags.get("landing_page"),
             "naming_status": status, "reviewed": convention != "untagged", "convention": convention,
             "campaign": top.get("campaign_name"), "adset": top.get("adset_name"),
