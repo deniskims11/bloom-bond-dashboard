@@ -1,4 +1,4 @@
-import DailyView from "./Daily.jsx";
+import DailyView, { dailyRows } from "./Daily.jsx";
 import SpendMix from "./SpendMix.jsx";
 import NvpLedger from "./NvpLedger.jsx";
 import { useEffect, useMemo, useState } from "react";
@@ -637,6 +637,31 @@ export default function Dashboard() {
     });
   }, [ads, anRules, anExclusions]);
 
+  // Previous period of the same length, grouped along the same dimensions, so
+  // the Analysis "Tendency" toggle can show change per row (path -> aggregate).
+  const prevInfo = useMemo(() => {
+    if (!(canActivity && dateMode === "activity" && dateStart && dateEnd)) return null;
+    const toD = yy => new Date(Date.UTC(2000 + +yy.slice(0, 2), +yy.slice(2, 4) - 1, +yy.slice(4, 6)));
+    const toYy = d => d.toISOString().slice(2, 10).replace(/-/g, "");
+    const s0 = toD(dateStart), e0 = toD(dateEnd); const len = Math.round((e0 - s0) / 864e5) + 1;
+    const pe = new Date(s0.getTime() - 864e5), ps = new Date(pe.getTime() - (len - 1) * 864e5);
+    let raw = periodAds(manifest.ads, manifest.days, toYy(ps), toYy(pe));
+    if (Object.keys(mappings).length) raw = raw.map(a => { const c = { ...a }; for (const [dim, map] of Object.entries(mappings)) if (c[dim] != null && map[c[dim]]) c[dim] = map[c[dim]]; return c; });
+    raw = raw.filter(a => {
+      for (const rule of anRules) { if (!rule.dim || rule.values.size === 0) continue; if (!rule.values.has(a[rule.dim] ?? "(untagged)")) return false; }
+      for (const [dim, ex] of Object.entries(anExclusions)) { if (ex.size && ex.has(a[dim] ?? "(untagged)")) return false; }
+      return true;
+    });
+    const dims = anRules.map(r => r.dim).filter(Boolean); const map = new Map();
+    const walk = (rows, i, path) => {
+      if (i >= dims.length) return;
+      const g = new Map(); for (const a of rows) { const v = a[dims[i]] ?? "(untagged)"; if (!g.has(v)) g.set(v, []); g.get(v).push(a); }
+      for (const [v, rs] of g) { const p = path ? `${path}\u241F${v}` : String(v); map.set(p, aggregate(rs)); walk(rs, i + 1, p); }
+    };
+    walk(raw, 0, "");
+    return { map, label: `${ps.toISOString().slice(0, 10)} → ${pe.toISOString().slice(0, 10)}`, empty: raw.length === 0 };
+  }, [manifest, mappings, dateStart, dateEnd, dateMode, canActivity, anRules, anExclusions]);
+
   // Build tree: dims = anRules ordered
   const analysisTree = useMemo(() => {
     const dims = anRules.map(r => r.dim).filter(Boolean);
@@ -893,6 +918,13 @@ export default function Dashboard() {
                 </div>
               ))}
             </div>
+
+            {canActivity && (
+              <div style={{ background: "#fff", borderRadius: 10, padding: 20, border: "1px solid #E8DCD0", marginBottom: 20 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 10px", color: "#3a2429" }}>Daily metrics <span style={{ fontWeight: 400, fontSize: 11, color: "#b0978f" }}>· every creative in view, day by day for the calendar range · tick metrics to plot them</span></h3>
+                <DailyView ads={ads} days={manifest.days} start={isoOf(dateStart)} end={isoOf(dateEnd)} roasLabel={LBL.roas || "ROAS"} hasNc={HAS_NC} />
+              </div>
+            )}
 
             {weeklyTotals.rows.length > 0 && (
               <div style={{ background: "#fff", borderRadius: 10, padding: 20, border: "1px solid #E8DCD0", marginBottom: 20 }}>
@@ -1216,6 +1248,7 @@ export default function Dashboard() {
         {tab === "Analysis" && (
           <AnalysisTab
             ads={ads}
+            prevInfo={prevInfo} days={manifest?.days} range={[isoOf(dateStart), isoOf(dateEnd)]}
             ALL_DIMS_LABELS={ALL_DIMS_LABELS}
             METRIC_MAP={METRIC_MAP}
             anRules={anRules} setAnRules={setAnRules}
@@ -1630,7 +1663,7 @@ function ValuePicker({ ads, dim, selected, onToggle, onClear }) {
 }
 
 // -------- Tree table with expand/collapse + leaf drilldown --------
-function TreeTable({ nodes, dimLabels, onLeafClick, onDaily }) {
+function TreeTable({ nodes, dimLabels, onLeafClick, onDaily, tendency, prevMap, timeline, days, range }) {
   const [expanded, setExpanded] = useState(new Set());
   const [sortCol, setSortCol] = useState("spend");
   const [sortDir, setSortDir] = useState("desc");
@@ -1666,11 +1699,44 @@ function TreeTable({ nodes, dimLabels, onLeafClick, onDaily }) {
       const isLeaf = !n.children;
       const isOpen = expanded.has(path);
       rows.push({ n, depth, path, isLeaf, isOpen });
+      // Timeline view: an open row lists its days (newest first) before its children.
+      if (timeline && isOpen && days?.length) {
+        for (const d of dailyRows(n.ads, days, range?.[0], range?.[1])) rows.push({ day: d, depth: depth + 1, path: `${path}\u241F@${d.date}` });
+      }
       if (!isLeaf && isOpen) walk(n.children, depth + 1, path);
     }
   };
   walk(nodes, 0, "");
 
+  // Tendency: change vs the previous period of the same length (same grouping path).
+  const delta = (path, key, cur, inverse = false) => {
+    if (!tendency || !prevMap) return null;
+    const p = prevMap.get(path)?.[key];
+    if (p == null || !p || cur == null) return <span style={{ fontSize: 9, color: "#b0978f", marginLeft: 4 }}>new</span>;
+    const ch = (cur - p) / Math.abs(p) * 100;
+    const good = inverse ? ch < 0 : ch > 0;
+    return <span style={{ fontSize: 9, fontWeight: 700, marginLeft: 4, padding: "0 3px", borderRadius: 3,
+      color: good ? "#15803d" : "#b91c1c", background: good ? "#EAF6EE" : "#FBEAEA" }}>{ch >= 0 ? "↗" : "↘"}{Math.abs(ch) >= 999 ? "999+" : Math.abs(ch).toFixed(0)}%</span>;
+  };
+  const dayRow = (r) => {
+    const d = r.day;
+    return (
+      <tr key={r.path} style={{ borderBottom: "1px solid #F5EDE5", background: "#FFFDF9" }}>
+        <td style={{ ...td, paddingLeft: 10 + r.depth * 20, color: "#5a4046" }}>
+          <span style={{ display: "inline-block", width: 14, color: "#b0978f" }}>🗓</span>{d.date}
+        </td>
+        <td style={{ ...td, textAlign: "right", color: "#b0978f" }}>—</td>
+        <td style={{ ...td, textAlign: "right" }}>{fmt(d.spend)}</td>
+        <td style={{ ...td, textAlign: "right" }}>{fmt(d.rev)}</td>
+        <td style={{ ...td, textAlign: "right" }}>{d.roas == null ? "—" : `${d.roas.toFixed(2)}x`}</td>
+        {HAS_NC && <td style={{ ...td, textAlign: "right" }}>{d.ncroas == null ? "—" : `${d.ncroas.toFixed(2)}x`}</td>}
+        <td style={{ ...td, textAlign: "right", color: "#b0978f" }}>—</td>
+        <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtNum(d.orders)}</td>
+        <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{d.aov ? `$${d.aov.toFixed(0)}` : "—"}</td>
+        <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{d.cpm ? `$${d.cpm.toFixed(1)}` : "—"}</td>
+      </tr>
+    );
+  };
   return (
     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
       <thead>
@@ -1688,28 +1754,28 @@ function TreeTable({ nodes, dimLabels, onLeafClick, onDaily }) {
         </tr>
       </thead>
       <tbody>
-        {rows.map(r => (
+        {rows.map(r => r.day ? dayRow(r) : (
           <tr key={r.path}
-            onClick={() => r.isLeaf ? onLeafClick(r.n, r.path) : toggle(r.path)}
+            onClick={() => (r.isLeaf && !timeline) ? onLeafClick(r.n, r.path) : toggle(r.path)}
             style={{ borderBottom: "1px solid #F5EDE5", cursor: "pointer", background: depthBg(r.depth) }}
             onMouseEnter={e => (e.currentTarget.style.background = "#FDE9BF")}
             onMouseLeave={e => (e.currentTarget.style.background = depthBg(r.depth))}>
             <td style={{ ...td, paddingLeft: 10 + r.depth * 20, fontWeight: r.depth === 0 ? 600 : 500 }}>
-              <span style={{ display: "inline-block", width: 14, color: "#b0978f" }}>{!r.isLeaf ? (r.isOpen ? "▼" : "▶") : "•"}</span>
+              <span style={{ display: "inline-block", width: 14, color: "#b0978f" }}>{(!r.isLeaf || timeline) ? (r.isOpen ? "▼" : "▶") : "•"}</span>
               {r.n.value}
               <span style={{ fontSize: 10, color: "#b0978f", marginLeft: 6 }}>({r.n.agg.count})</span>
               {onDaily && <button onClick={e => { e.stopPropagation(); onDaily(r.n, r.path); }} title="By day"
                 style={{ marginLeft: 8, border: "1px solid #E8DCD0", background: "#fff", borderRadius: 4, cursor: "pointer", fontSize: 10, padding: "1px 5px" }}>📈</button>}
             </td>
             <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtNum(r.n.agg.count)}</td>
-            <td style={{ ...td, textAlign: "right", fontWeight: 500 }}>{fmt(r.n.agg.spend)}</td>
-            <td style={{ ...td, textAlign: "right" }}>{fmt(r.n.agg.rev)}</td>
-            <td style={{ ...td, textAlign: "right" }}><RoasBadge roas={r.n.agg.roas} /></td>
-            {HAS_NC && <td style={{ ...td, textAlign: "right" }}><RoasBadge roas={r.n.agg.ncroas} base="ncroas" /></td>}
+            <td style={{ ...td, textAlign: "right", fontWeight: 500 }}>{fmt(r.n.agg.spend)}{delta(r.path, "spend", r.n.agg.spend)}</td>
+            <td style={{ ...td, textAlign: "right" }}>{fmt(r.n.agg.rev)}{delta(r.path, "rev", r.n.agg.rev)}</td>
+            <td style={{ ...td, textAlign: "right" }}><RoasBadge roas={r.n.agg.roas} />{delta(r.path, "roas", r.n.agg.roas)}</td>
+            {HAS_NC && <td style={{ ...td, textAlign: "right" }}><RoasBadge roas={r.n.agg.ncroas} base="ncroas" />{delta(r.path, "ncroas", r.n.agg.ncroas)}</td>}
             <td style={{ ...td, textAlign: "right" }}>{fmtPct(r.n.agg.pct_new)}</td>
             <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtNum(r.n.agg.txns)}</td>
             <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{r.n.agg.aov ? `$${r.n.agg.aov.toFixed(0)}` : "—"}</td>
-            <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{r.n.agg.cpm ? `$${r.n.agg.cpm.toFixed(1)}` : "—"}</td>
+            <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{r.n.agg.cpm ? `$${r.n.agg.cpm.toFixed(1)}` : "—"}{delta(r.path, "cpm", r.n.agg.cpm, true)}</td>
           </tr>
         ))}
       </tbody>
@@ -1718,8 +1784,10 @@ function TreeTable({ nodes, dimLabels, onLeafClick, onDaily }) {
 }
 
 // -------- Analysis tab with row-based rule picker + tree table --------
-function AnalysisTab({ ads, ALL_DIMS_LABELS, METRIC_MAP, anRules, setAnRules, anMetric, setAnMetric, anMinSpend, setAnMinSpend, anTopN, setAnTopN, anExclusions, setAnExclusions, analysisTree, analysisChartData, openModal }) {
+function AnalysisTab({ ads, prevInfo, days, range, ALL_DIMS_LABELS, METRIC_MAP, anRules, setAnRules, anMetric, setAnMetric, anMinSpend, setAnMinSpend, anTopN, setAnTopN, anExclusions, setAnExclusions, analysisTree, analysisChartData, openModal }) {
   const [expandedExcludeDim, setExpandedExcludeDim] = useState(null);
+  const [tendency, setTendency] = useState(false);
+  const [timeline, setTimeline] = useState(false);
 
   const setRuleDim = (i, dim) => setAnRules(rs => rs.map((r, idx) => idx === i ? { dim, values: new Set() } : r));
   const toggleRuleValue = (i, v) => setAnRules(rs => rs.map((r, idx) => {
@@ -1892,13 +1960,27 @@ function AnalysisTab({ ads, ALL_DIMS_LABELS, METRIC_MAP, anRules, setAnRules, an
           <SpendMix tree={analysisTree} dims={activeDims} labels={ALL_DIMS_LABELS} baselineNc={BASELINE.ncroas}
             onAds={(name, rows) => openModal(name, `${rows.length} creatives`, rows)} />
           <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "1px solid #E8DCD0", overflowX: "auto" }}>
-            <h3 style={{ fontSize: 13, fontWeight: 600, margin: "0 0 4px", color: "#3a2429" }}>Breakdown</h3>
+            <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+              <h3 style={{ fontSize: 13, fontWeight: 600, margin: 0, color: "#3a2429" }}>Breakdown</h3>
+              {[["Tendency", tendency, setTendency, prevInfo ? `vs previous period ${prevInfo.label}${prevInfo.empty ? " (no data)" : ""}` : "pick a date range (spend in period) to compare"],
+                ["Timeline view", timeline, setTimeline, "expand any row to see it day by day"]].map(([label, on, set, hint]) => (
+                <label key={label} title={hint} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: "#3a2429", cursor: "pointer" }}>
+                  <span onClick={() => set(!on)} style={{ width: 30, height: 16, borderRadius: 8, background: on ? "#6B0010" : "#D8C8BC", position: "relative", transition: "background .15s" }}>
+                    <span style={{ position: "absolute", top: 2, left: on ? 16 : 2, width: 12, height: 12, borderRadius: 6, background: "#fff", transition: "left .15s" }} />
+                  </span>
+                  <span onClick={() => set(!on)}>{label}</span>
+                </label>
+              ))}
+              {tendency && prevInfo && <span style={{ fontSize: 11, color: "#b0978f" }}>change vs {prevInfo.label}</span>}
+              {tendency && !prevInfo && <span style={{ fontSize: 11, color: "#b91c1c" }}>pick a date range at the top to compare periods</span>}
+            </div>
             <p style={{ fontSize: 11, color: "#b0978f", margin: "0 0 10px" }}>Click a row to expand to the next dimension. Click a leaf row to see ad-level data.</p>
             <TreeTable
               nodes={analysisTree}
               dimLabels={activeDims.map(d => ALL_DIMS_LABELS[d])}
               onLeafClick={(node, path) => openModal(path.replaceAll("\u241F", " › "), `${node.agg.count} ads · Spend ${fmt(node.agg.spend)}`, node.ads)}
               onDaily={(node, path) => openModal(path.replaceAll("\u241F", " › "), `${node.agg.count} ads · Spend ${fmt(node.agg.spend)}`, node.ads, "daily")}
+              tendency={tendency && !!prevInfo} prevMap={prevInfo?.map} timeline={timeline} days={days} range={range}
             />
           </div>
         </>

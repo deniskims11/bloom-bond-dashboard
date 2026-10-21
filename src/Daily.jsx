@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from "recharts";
 
 // Day-by-day performance for any set of creatives, inside the date range the
@@ -30,13 +30,28 @@ export function dailyRows(ads, days, startIso, endIso) {
       cpa: orders ? spend / orders : null, cpc: clicks ? spend / clicks : null,
       ctr: imps ? (clicks / imps) * 100 : null, cpm: imps ? (spend / imps) * 1000 : null,
       nvp: vis ? (nv / vis) * 100 : null,
+      aov: orders ? rev / orders : null, cvr: clicks ? (orders / clicks) * 100 : null,
     });
   }
   return out; // newest first
 }
 
-export default function DailyView({ ads, days, start, end, roasLabel = "ROAS", hasNc = true }) {
+// Metrics the chart can plot (each on its own scale, like Moby's metric picker).
+export const DAILY_METRICS = [
+  { key: "roas", label: "ROAS", color: "#6B0010", fmt: v => `${v.toFixed(2)}x` },
+  { key: "ncroas", label: "NCROAS", color: "#0ea5e9", fmt: v => `${v.toFixed(2)}x`, nc: true },
+  { key: "cpa", label: "CPA", color: "#d97706", fmt: v => `$${v.toFixed(0)}` },
+  { key: "cpc", label: "CPC", color: "#16a34a", fmt: v => `$${v.toFixed(2)}` },
+  { key: "ctr", label: "CTR", color: "#9333ea", fmt: v => `${v.toFixed(2)}%` },
+  { key: "cvr", label: "CVR", color: "#db2777", fmt: v => `${v.toFixed(2)}%` },
+  { key: "cpm", label: "CPM", color: "#475569", fmt: v => `$${v.toFixed(2)}` },
+  { key: "aov", label: "AOV", color: "#0d9488", fmt: v => `$${v.toFixed(0)}` },
+  { key: "nvp", label: "% New Vis.", color: "#ca8a04", fmt: v => `${v.toFixed(1)}%` },
+];
+
+export default function DailyView({ ads, days, start, end, roasLabel = "ROAS", hasNc = true, showTable = true }) {
   const rows = useMemo(() => dailyRows(ads, days || [], start, end), [ads, days, start, end]);
+  const [picked, setPicked] = useState(["roas", "ncroas"]);
   if (!days || !days.length) return <p style={{ fontSize: 12, color: "#8a6f68" }}>Daily data is not available in this build.</p>;
   if (!rows.length) return <p style={{ fontSize: 12, color: "#8a6f68" }}>No days in the selected range.</p>;
   const tot = rows.reduce((t, r) => { for (const k of ["spend", "rev", "orders", "nc_rev", "imps", "clicks"]) t[k] += r[k]; return t; },
@@ -46,28 +61,48 @@ export default function DailyView({ ads, days, start, end, roasLabel = "ROAS", h
   const td = { padding: "6px 8px", fontSize: 11, textAlign: "right", borderBottom: "1px solid #F5EDE5" };
   return (
     <div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", marginBottom: 6 }}>
+        {DAILY_METRICS.filter(m => hasNc || !m.nc).map(m => {
+          const on = picked.includes(m.key);
+          const t = m.key === "roas" ? (tot.spend ? tot.rev / tot.spend : null) : m.key === "ncroas" ? (tot.spend ? tot.nc_rev / tot.spend : null)
+            : m.key === "cpa" ? (tot.orders ? tot.spend / tot.orders : null) : m.key === "cpc" ? (tot.clicks ? tot.spend / tot.clicks : null)
+            : m.key === "ctr" ? (tot.imps ? tot.clicks / tot.imps * 100 : null) : m.key === "cvr" ? (tot.clicks ? tot.orders / tot.clicks * 100 : null)
+            : m.key === "cpm" ? (tot.imps ? tot.spend / tot.imps * 1000 : null) : m.key === "aov" ? (tot.orders ? tot.rev / tot.orders : null) : null;
+          return (
+            <label key={m.key} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, cursor: "pointer", color: on ? "#3a2429" : "#8a6f68" }}>
+              <input type="checkbox" checked={on} onChange={() => setPicked(p => on ? p.filter(k => k !== m.key) : [...p, m.key])} style={{ accentColor: m.color }} />
+              <span style={{ fontWeight: 600, color: on ? m.color : undefined }}>{m.key === "roas" ? roasLabel : m.label}</span>
+              {t != null && <span style={{ color: "#8a6f68" }}>{m.fmt(t)}</span>}
+            </label>
+          );
+        })}
+      </div>
       <div style={{ height: 230, marginBottom: 10 }}>
         <ResponsiveContainer>
           <ComposedChart data={chart} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid stroke="#F0E6DD" vertical={false} />
             <XAxis dataKey="day" tick={{ fontSize: 10 }} />
             <YAxis yAxisId="l" tick={{ fontSize: 10 }} tickFormatter={v => `$${v >= 1000 ? Math.round(v / 1000) + "K" : v}`} />
-            <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 10 }} tickFormatter={v => `${v.toFixed(1)}x`} />
-            <Tooltip formatter={(v, n) => (n === "Spend" ? money(v) : x2(v))} />
+            {DAILY_METRICS.filter(m => picked.includes(m.key)).map((m, i) => (
+              <YAxis key={m.key} yAxisId={m.key} orientation="right" hide={i > 0} tick={{ fontSize: 10 }} tickFormatter={v => m.fmt(v)} width={i > 0 ? 0 : 52} />
+            ))}
+            <Tooltip formatter={(v, n) => { const m = DAILY_METRICS.find(x => x.label === n || (x.key === "roas" && n === roasLabel)); return v == null ? "—" : m ? m.fmt(v) : money(v); }} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Bar yAxisId="l" dataKey="spend" name="Spend" fill="#D8C8BC" radius={[3, 3, 0, 0]} />
-            <Line yAxisId="r" dataKey="roas" name={roasLabel} stroke="#6B0010" strokeWidth={2} dot={{ r: 2 }} connectNulls />
-            {hasNc && <Line yAxisId="r" dataKey="ncroas" name="NCROAS" stroke="#0ea5e9" strokeWidth={2} dot={{ r: 2 }} connectNulls />}
+            <Bar yAxisId="l" dataKey="spend" name="Spend" fill="#E8DCD0" radius={[3, 3, 0, 0]} />
+            {DAILY_METRICS.filter(m => picked.includes(m.key) && (hasNc || !m.nc)).map(m => (
+              <Line key={m.key} yAxisId={m.key} dataKey={m.key} name={m.key === "roas" ? roasLabel : m.label} stroke={m.color} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+            ))}
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+      {showTable && (
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr style={{ borderBottom: "2px solid #E8DCD0" }}>
             <th style={{ ...th, textAlign: "left" }}>Day</th>
             <th style={th}>Spend</th><th style={th}>Revenue</th><th style={th}>{roasLabel}</th>
             {hasNc && <th style={th}>NC rev</th>}{hasNc && <th style={th}>NCROAS</th>}
-            <th style={th}>Orders</th><th style={th}>CPA</th><th style={th}>CTR</th><th style={th}>CPC</th><th style={th}>CPM</th><th style={th}>% New Vis.</th>
+            <th style={th}>Orders</th><th style={th}>CVR</th><th style={th}>AOV</th><th style={th}>CPA</th><th style={th}>CTR</th><th style={th}>CPC</th><th style={th}>CPM</th><th style={th}>% New Vis.</th>
           </tr>
         </thead>
         <tbody>
@@ -77,6 +112,8 @@ export default function DailyView({ ads, days, start, end, roasLabel = "ROAS", h
             <td style={td}>{x2(tot.spend ? tot.rev / tot.spend : null)}</td>
             {hasNc && <td style={td}>{money(tot.nc_rev)}</td>}{hasNc && <td style={td}>{x2(tot.spend ? tot.nc_rev / tot.spend : null)}</td>}
             <td style={td}>{Math.round(tot.orders).toLocaleString()}</td>
+            <td style={td}>{pct(tot.clicks ? (tot.orders / tot.clicks) * 100 : null)}</td>
+            <td style={td}>{tot.orders ? money(tot.rev / tot.orders) : "—"}</td>
             <td style={td}>{tot.orders ? money(tot.spend / tot.orders) : "—"}</td>
             <td style={td}>{pct(tot.imps ? (tot.clicks / tot.imps) * 100 : null)}</td>
             <td style={td}>{tot.clicks ? `$${(tot.spend / tot.clicks).toFixed(2)}` : "—"}</td>
@@ -89,13 +126,14 @@ export default function DailyView({ ads, days, start, end, roasLabel = "ROAS", h
               <td style={{ ...td, fontWeight: 600 }}>{money(r.spend)}</td><td style={td}>{money(r.rev)}</td>
               <td style={{ ...td, color: "#6B0010", fontWeight: 600 }}>{x2(r.roas)}</td>
               {hasNc && <td style={td}>{money(r.nc_rev)}</td>}{hasNc && <td style={{ ...td, color: "#0369a1", fontWeight: 600 }}>{x2(r.ncroas)}</td>}
-              <td style={td}>{Math.round(r.orders).toLocaleString()}</td><td style={td}>{r.cpa == null ? "—" : money(r.cpa)}</td>
+              <td style={td}>{Math.round(r.orders).toLocaleString()}</td><td style={td}>{pct(r.cvr)}</td><td style={td}>{r.aov == null ? "—" : money(r.aov)}</td><td style={td}>{r.cpa == null ? "—" : money(r.cpa)}</td>
               <td style={td}>{pct(r.ctr)}</td><td style={td}>{r.cpc == null ? "—" : `$${r.cpc.toFixed(2)}`}</td>
               <td style={td}>{r.cpm == null ? "—" : `$${r.cpm.toFixed(2)}`}</td><td style={td}>{pct(r.nvp)}</td>
             </tr>
           ))}
         </tbody>
       </table>
+      )}
     </div>
   );
 }
