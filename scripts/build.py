@@ -216,7 +216,7 @@ def meta_history_ads(ads, codes, legacy, start):
     return out
 
 
-def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=None):
+def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=None, adjust_path=None):
     codes, _ = load_definitions(defs_path)
     legacy = json.loads(pathlib.Path(legacy_path).read_text())
     rows = list(csv.DictReader(open(ads_path, encoding="utf-8"), delimiter="\t"))
@@ -241,6 +241,14 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
                 r = dict(zip(dcols, l.split(";")))
                 daily[r["ad_id"]].append(r)
     days = sorted({r["date"] for rs in daily.values() for r in rs})
+    # Per-day adjusted-NC factors (fetch_tw_sql.py): Meta's spend share of the
+    # Non-attributed + organic new-customer pool, as a multiplier on pixel NC.
+    adj = {}
+    if adjust_path and pathlib.Path(adjust_path).exists():
+        for l in pathlib.Path(adjust_path).read_text().splitlines()[1:]:
+            if l.strip():
+                d, fac, ofac, *_ = l.split(";")
+                adj[d] = (float(fac), float(ofac))
     didx = {d: i for i, d in enumerate(days)}
     DD = ["spend", "meta_rev", "meta_conv", "nc_rev", "nc_orders", "nv", "vis", "imps", "clk", "px_rev", "px_orders"]
 
@@ -278,12 +286,15 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
                 v = wk[widx[w["week"]]]
                 v[0] += num(w["spend"]); v[1] += num(w["meta_rev"]); v[2] += num(w["nc_rev"]); v[3] += num(w["nc_orders"])
 
-        dd = defaultdict(lambda: [0.0] * len(DD))
+        dd = defaultdict(lambda: [0.0] * (len(DD) + 2))
         for r in rs:
             for x in daily.get(r["ad_id"], []):
                 v = dd[didx[x["date"]]]
                 for j, k in enumerate(DD):
                     v[j] += num(x[k])
+                fac, ofac = adj.get(x["date"], (1.0, 1.0))
+                v[len(DD)] += num(x["nc_rev"]) * fac
+                v[len(DD) + 1] += num(x["nc_orders"]) * ofac
 
         image = next((r["image_url"] for r in rs if r.get("image_url")), None)
         aw = norm_awareness(tags.get("awareness_stage"))
@@ -308,6 +319,8 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
             "cpm": round(spend / imps * 1000, 2) if imps else 0,
             "cpc": round(spend / clicks, 2) if clicks else None,
             "ctr": round(clicks / imps * 100, 3) if imps else None,
+            "nc_rev_adj": round(sum(v[len(DD)] for v in dd.values()), 2) if adj else None,
+            "nc_txns_adj": round(sum(v[len(DD) + 1] for v in dd.values()), 1) if adj else None,
             "spend_d14": round(s14, 2), "nc_rev_d14": round(n14, 2),
             "ncroas_d14": round(n14 / s14, 4) if s14 else None,
         }
@@ -338,7 +351,7 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
                               "Launched in window" if mature else f"Too new (< {MATURE_DAYS} days)"),
             "meta_ad_ids": [r["ad_id"] for r in rs][:5], "metrics": metrics,
             # [dayIdx, spend, meta_rev, meta_conv, nc_rev, nc_orders, new_visitors, visitors,
-            #  impressions, clicks, pixel_rev, pixel_orders]
+            #  impressions, clicks, pixel_rev, pixel_orders, nc_rev_adj, nc_orders_adj]
             "dd": [[k] + [round(x, 2) for x in v] for k, v in sorted(dd.items())],
             "wk": [[k, round(v[0], 2), round(v[1], 2), round(v[2], 2), v[3]] for k, v in sorted(wk.items())],
             "thumbnail_candidates": [],
@@ -369,7 +382,9 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
                         "window": "7DC/1DV (Meta) · 7-day + views (TW NC)"},
         "ad_accounts": sorted({a["ad_account"] for a in ads if a["ad_account"]}),
         "weeks": weeks, "days": days, "mature_days": MATURE_DAYS,
-        "baseline": {"roas": round(meta / tot, 4), "ncroas": round(nc / tot, 4)},
+        "baseline": {"roas": round(meta / tot, 4), "ncroas": round(nc / tot, 4),
+                     "ncroas_adj": round(sum(a["metrics"].get("nc_rev_adj") or 0 for a in ads) / tot, 4) if adj else None},
+        "has_nc_adj": bool(adj),
         "scope_note": (
             f"Every Meta ad that spent {start} → {end}, rolled up to {len(ads):,} creatives. "
             f"{share('new'):.0%} of spend is on the new naming convention, {share('old'):.0%} on the old "
@@ -391,7 +406,7 @@ def main():
     if len(a) < 4:
         sys.exit("usage: build.py <ads.tsv> <weekly.csv> <start YYYY-MM-DD> <end YYYY-MM-DD> [daily.csv]")
     m = build(a[0], a[1], ROOT / "data" / "definitions.csv", ROOT / "data" / "legacy_map.json", a[2], a[3],
-              a[4] if len(a) > 4 else None)
+              a[4] if len(a) > 4 else None, a[5] if len(a) > 5 else None)
     out = ROOT / "public" / "data"
     (out / "history").mkdir(parents=True, exist_ok=True)
     (out / "latest.json").write_text(json.dumps(m, separators=(",", ":"), default=str))

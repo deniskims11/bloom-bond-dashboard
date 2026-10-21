@@ -494,6 +494,26 @@ export default function Dashboard() {
   // Creation-date filter. Null = "full range"; otherwise YYMMDD strings.
   const [dateStart, setDateStart] = useState(null);
   const [dateMode, setDateMode] = useState("activity");
+  // New-customer lens: "adjusted" adds Meta's spend share of TW's Non-attributed +
+  // organic new-customer revenue (see fetch_tw_sql.py); "pixel" is TW as reported.
+  const [ncLens, setNcLens] = useState("adjusted");
+  const lensOn = ncLens === "adjusted" && !!manifest?.has_nc_adj;
+  const lensBaseline = manifest ? { ...manifest.baseline, ncroas: lensOn ? manifest.baseline.ncroas_adj : manifest.baseline.ncroas } : null;
+  const lensAds = useMemo(() => {
+    const src = manifest?.ads ?? [];
+    if (!lensOn) return src;
+    return src.map(a => {
+      const m = a.metrics; const nc = m.nc_rev_adj ?? m.nc_rev, nco = m.nc_txns_adj ?? m.nc_txns;
+      return { ...a,
+        // The reallocated new-customer orders are real orders, so they join the pixel totals too.
+        metrics: { ...m, nc_rev: nc, nc_txns: nco, ncroas: m.spend ? nc / m.spend : null, nccpa: nco ? m.spend / nco : null,
+          pixel_rev: (m.pixel_rev || 0) + (nc - (m.nc_rev || 0)), pixel_txns: (m.pixel_txns || 0) + (nco - (m.nc_txns || 0)),
+          pct_new: ((m.pixel_txns || 0) + (nco - (m.nc_txns || 0))) ? (nco / ((m.pixel_txns || 0) + (nco - (m.nc_txns || 0)))) * 100 : null },
+        dd: (a.dd || []).map(r => (r.length > 13
+          ? [r[0], r[1], r[2], r[3], r[12], r[13], r[6], r[7], r[8], r[9], r[10] + (r[12] - r[4]), r[11] + (r[13] - r[5]), r[12], r[13]]
+          : r)) };
+    });
+  }, [manifest, lensOn]);
   const [dateEnd, setDateEnd] = useState(null);
 
   // Global modal state (shared across tabs)
@@ -533,9 +553,9 @@ export default function Dashboard() {
   // Apply mappings + creation-date filter to ads.
   const ads = useMemo(() => {
     // Baseline must be in place before any memo below derives badges / efficient wins.
-    setBaseline(manifest?.baseline);
+    setBaseline(lensBaseline);
     setLabels(manifest);
-    let raw = manifest?.ads ?? [];
+    let raw = lensAds;
     if ((dateStart || dateEnd) && canActivity && dateMode === "activity") {
       raw = periodAds(raw, manifest.days, dateStart, dateEnd);
     } else if (dateStart || dateEnd) {
@@ -554,7 +574,7 @@ export default function Dashboard() {
       }
       return copy;
     });
-  }, [manifest, mappings, dateStart, dateEnd, dateMode, canActivity]);
+  }, [manifest, lensAds, mappings, dateStart, dateEnd, dateMode, canActivity]);
 
   const totals = useMemo(() => aggregate(ads), [ads]);
   const monthlyData = useMemo(() => monthly(ads), [ads]);
@@ -570,8 +590,8 @@ export default function Dashboard() {
   // Win rates are launch-cohort metrics, so the activity-date filter doesn't apply.
   // Win rates are launch cohorts: current-window creatives plus the Meta history
   // (launches before the Triple Whale window, spend = Meta before it + TW after).
-  const wrAds = useMemo(() => (dateMode === "activity" && canActivity ? (manifest?.ads ?? []) : ads).concat(manifest?.history_ads ?? []),
-    [ads, manifest, dateMode, canActivity]);
+  const wrAds = useMemo(() => (dateMode === "activity" && canActivity ? lensAds : ads).concat(manifest?.history_ads ?? []),
+    [ads, lensAds, manifest, dateMode, canActivity]);
   const wrData = useMemo(() => winRate(wrAds, wrFormat, wrStrategist), [wrAds, wrFormat, wrStrategist]);
   const strategistList = useMemo(
     () => Array.from(new Set(ads.map(a => a.strategist).filter(Boolean))).sort(),
@@ -649,7 +669,7 @@ export default function Dashboard() {
     const toYy = d => d.toISOString().slice(2, 10).replace(/-/g, "");
     const s0 = toD(dateStart), e0 = toD(dateEnd); const len = Math.round((e0 - s0) / 864e5) + 1;
     const pe = new Date(s0.getTime() - 864e5), ps = new Date(pe.getTime() - (len - 1) * 864e5);
-    let raw = periodAds(manifest.ads, manifest.days, toYy(ps), toYy(pe));
+    let raw = periodAds(lensAds, manifest.days, toYy(ps), toYy(pe));
     if (Object.keys(mappings).length) raw = raw.map(a => { const c = { ...a }; for (const [dim, map] of Object.entries(mappings)) if (c[dim] != null && map[c[dim]]) c[dim] = map[c[dim]]; return c; });
     raw = raw.filter(a => {
       for (const rule of anRules) { if (!rule.dim || rule.values.size === 0) continue; if (!rule.values.has(a[rule.dim] ?? "(untagged)")) return false; }
@@ -664,7 +684,7 @@ export default function Dashboard() {
     };
     walk(raw, 0, "");
     return { map, label: `${ps.toISOString().slice(0, 10)} → ${pe.toISOString().slice(0, 10)}`, empty: raw.length === 0 };
-  }, [manifest, mappings, dateStart, dateEnd, dateMode, canActivity, anRules, anExclusions]);
+  }, [manifest, lensAds, mappings, dateStart, dateEnd, dateMode, canActivity, anRules, anExclusions]);
 
   // Build tree: dims = anRules ordered
   const analysisTree = useMemo(() => {
@@ -818,7 +838,8 @@ export default function Dashboard() {
   if (!manifest) return <div style={{ padding: 24, fontFamily: "sans-serif", color: "#8a6f68" }}>Loading data…</div>;
 
   HAS_NC = manifest.has_nc !== false;
-  setBaseline(manifest.baseline);
+  setBaseline(lensBaseline);
+  if (lensOn) LBL.nc_sub = "Adjusted: TW pixel + Meta's spend share of unattributed / organic NC";
   HAS_NV = (manifest.ads || []).some(a => a.metrics && a.metrics.visitors);
   const fromMaster = (manifest.source || "").startsWith("master-workbook");
 
@@ -898,6 +919,22 @@ export default function Dashboard() {
           setStart={setDateStart}
           setEnd={setDateEnd}
         />
+        {manifest.has_nc_adj && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "-6px 0 16px", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--bb-muted)", letterSpacing: 0.3 }}>NEW-CUSTOMER NUMBERS</span>
+            <div style={{ display: "flex", gap: 3, background: "#fff", border: "1px solid var(--bb-line)", borderRadius: 8, padding: 2 }}>
+              {[["adjusted", "Adjusted"], ["pixel", "Pixel only"]].map(([k, l]) => (
+                <button key={k} onClick={() => setNcLens(k)} style={{ padding: "4px 12px", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 11, fontWeight: 600,
+                  background: ncLens === k ? "var(--bb-brown)" : "transparent", color: ncLens === k ? "#fff" : "var(--bb-muted)" }}>{l}</button>
+              ))}
+            </div>
+            <span style={{ fontSize: 11, color: "var(--bb-muted)" }}>
+              {lensOn
+                ? `Adjusted adds Meta's daily spend share of the new-customer revenue Triple Whale leaves "Non-attributed" or "organic" (untracked checkout / lander domains). Account NCROAS ${manifest.baseline.ncroas_adj?.toFixed(2)}x adjusted vs ${manifest.baseline.ncroas.toFixed(2)}x pixel.`
+                : `Triple Whale pixel as reported (Triple Attribution + Views, 7-day).`}
+            </span>
+          </div>
+        )}
 
         <div style={{ display: "flex", gap: 4, marginBottom: 22, padding: 5, background: "#fff", border: "1px solid var(--bb-line)", borderRadius: 12, overflowX: "auto" }}>
           {TABS.map(t => (
@@ -1152,7 +1189,7 @@ export default function Dashboard() {
         )}
         {tab === "NVP Buckets" && (
           canActivity ? (
-            <NvpLedger ads={manifest.ads} days={manifest.days} baselineNc={BASELINE.ncroas}
+            <NvpLedger ads={lensAds} days={manifest.days} baselineNc={BASELINE.ncroas}
               roasLabel={LBL.roas || "ROAS"} />
           ) : <p style={{ color: "#8a6f68" }}>Needs daily data — available after the next refresh.</p>
         )}
