@@ -131,8 +131,32 @@ export function monthly(ads) {
 
 // Win rate: for each launch month, count creatives by spend threshold.
 // Denominators exclude never-spent creatives.
+// Variants of one creative (same Notion batch number, e.g. 1796.2 / 1796.5 / other
+// landing pages) count as ONE launch with their combined spend. A history record
+// (Meta export + later TW spend) already contains its own later spend, so a
+// current-window ad with the same name is dropped to avoid double counting.
+export function consolidate(ads) {
+  const g = new Map();
+  for (const a of ads) { const k = a.batch_no || a.ad_name; if (!g.has(k)) g.set(k, []); g.get(k).push(a); }
+  const out = [];
+  for (const vs0 of g.values()) {
+    const hist = new Set(vs0.filter(v => v.history).map(v => v.ad_name));
+    const vs = vs0.filter(v => v.history || !hist.has(v.ad_name));
+    if (vs.length === 1) { out.push({ ...vs[0], variants: vs }); continue; }
+    const top = vs.reduce((x, y) => ((y.metrics.spend || 0) > (x.metrics.spend || 0) ? y : x));
+    const sum = (k) => vs.reduce((t, v) => t + (v.metrics[k] || 0), 0);
+    const spend = sum("spend"), nc = sum("nc_rev"), rev = sum("rev");
+    const dated = vs.filter(v => v.date).sort((x, y) => (x.date < y.date ? -1 : 1));
+    const first = dated[0] || top;
+    out.push({ ...top, variants: vs, date: first.date, launch_date: first.launch_date,
+      carry_over: !!first.carry_over, mature: first.mature, history: vs.every(v => v.history),
+      metrics: { ...top.metrics, spend, rev, nc_rev: nc, roas: spend ? rev / spend : 0, ncroas: top.metrics.ncroas == null && !nc ? null : (spend ? nc / spend : null) } });
+  }
+  return out;
+}
+
 export function winRate(ads, formatFilter = "blended", strategistFilter = "all") {
-  let filtered = ads.filter(launchEligible);
+  let filtered = consolidate(ads).filter(launchEligible);
   if (formatFilter !== "blended") {
     filtered = filtered.filter((a) => a.format === formatFilter);
   }
@@ -153,37 +177,37 @@ export function winRate(ads, formatFilter = "blended", strategistFilter = "all")
     .map(([month, monthAds]) => {
       const thresholds = {};
       for (const t of THRESHOLDS) {
-        const n = monthAds.filter((a) => (a.metrics.spend || 0) >= t.min).length;
+        const hit = monthAds.filter((a) => (a.metrics.spend || 0) >= t.min);
         thresholds[t.key] = {
-          n,
-          rate: monthAds.length ? (n / monthAds.length) * 100 : 0,
+          n: hit.length, ads: hit,
+          rate: monthAds.length ? (hit.length / monthAds.length) * 100 : 0,
         };
       }
       const eff = monthAds.filter(isEfficientWin).length;
       const hist = monthAds.every((a) => a.history);
       // Meta history months have no new-customer data, so "efficient" is unknown there.
-      thresholds["Efficient"] = hist ? { n: null, rate: null } : { n: eff, rate: monthAds.length ? (eff / monthAds.length) * 100 : 0 };
-      return { month, total: monthAds.length, thresholds, history: hist };
+      thresholds["Efficient"] = hist ? { n: null, rate: null } : { n: eff, ads: monthAds.filter(isEfficientWin), rate: monthAds.length ? (eff / monthAds.length) * 100 : 0 };
+      return { month, total: monthAds.length, launches: monthAds, thresholds, history: hist };
     });
 
   const totalThresholds = {};
   for (const t of THRESHOLDS) {
-    const n = filtered.filter((a) => (a.metrics.spend || 0) >= t.min).length;
+    const hit = filtered.filter((a) => (a.metrics.spend || 0) >= t.min);
     totalThresholds[t.key] = {
-      n,
-      rate: filtered.length ? (n / filtered.length) * 100 : 0,
+      n: hit.length, ads: hit,
+      rate: filtered.length ? (hit.length / filtered.length) * 100 : 0,
     };
   }
   const effTot = filtered.filter(isEfficientWin).length;
-  totalThresholds["Efficient"] = { n: effTot, rate: filtered.length ? (effTot / filtered.length) * 100 : 0 };
-  rows.push({ month: "TOTAL", total: filtered.length, thresholds: totalThresholds });
+  totalThresholds["Efficient"] = { n: effTot, ads: filtered.filter(isEfficientWin), rate: filtered.length ? (effTot / filtered.length) * 100 : 0 };
+  rows.push({ month: "TOTAL", total: filtered.length, launches: filtered, thresholds: totalThresholds });
   return rows;
 }
 
 // Convert a groupBy result into the breakdown-table row shape.
 export function toBreakdownRows(groups) {
   return groups.map((g) => {
-    const spenders = g.ads.filter(launchEligible);
+    const spenders = consolidate(g.ads).filter(launchEligible);
     const wr = (min) =>
       spenders.length
         ? (spenders.filter((a) => (a.metrics.spend || 0) >= min).length /
@@ -203,6 +227,8 @@ export function toBreakdownRows(groups) {
       pct_new: g.pct_new,
       purchases: g.txns,
       aov: g.aov,
+      cpa: g.txns ? g.spend / g.txns : null,
+      cvr: g.clicks ? (g.txns / g.clicks) * 100 : null,
       ctr: g.ctr,
       cpm: g.cpm,
       cpc: g.cpc,
@@ -287,24 +313,19 @@ export const DIMENSIONS = [
   "awareness_stage",
   "product",
   "creative_no",
-  "buying_type",
-  "batch",
-  "attribution_window",
-  "geo",
   "naming_status",
   "convention",
   "strategist",
   "launch_status",
-  "funnel",
   "reason",
   "origin",
   "type",
-  "length",
-  "persuasion",
   "editor",
   "writer",
   "creator",
   "landing_page",
+  "profile",
+  "batch_no",
 ];
 
 export function dimensionValues(ads, dim) {
@@ -318,4 +339,47 @@ export function dimensionValues(ads, dim) {
   return Array.from(counts.entries())
     .map(([value, n]) => ({ value, n, spend: spendByValue.get(value) || 0 }))
     .sort((a, b) => b.spend - a.spend);
+}
+
+// Testing vs scaling (Adam, Oct 21): each day's spend is bucketed by how much
+// the creative (all variants of one batch together) had spent in its lifetime
+// before that day — Meta spend before the Triple Whale window (pre_spend) plus
+// everything since. Under $1K = testing, $1K–$10K = proving, $10K+ = scaling.
+export const TS_BUCKETS = [
+  { key: "Testing (<$1K)", max: 1000, color: "#E3B59F" },
+  { key: "Proving ($1K–$10K)", max: 10000, color: "#CC6138" },
+  { key: "Scaling ($10K+)", max: Infinity, color: "#3A1B11" },
+];
+export function testingScaling(ads, days, startIso, endIso) {
+  const monday = (iso) => {
+    const d = new Date(iso + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+    return d.toISOString().slice(0, 10);
+  };
+  const groups = new Map();
+  for (const a of ads) {
+    if (a.history) continue;
+    const k = a.batch_no || a.ad_name;
+    const g = groups.get(k) || { pre: 0, byDay: new Map() };
+    g.pre += a.pre_spend || 0;
+    for (const r of a.dd || []) g.byDay.set(r[0], (g.byDay.get(r[0]) || 0) + r[1]);
+    groups.set(k, g);
+  }
+  const rows = new Map();
+  for (const g of groups.values()) {
+    let cum = g.pre;
+    for (const di of [...g.byDay.keys()].sort((x, y) => x - y)) {
+      const s = g.byDay.get(di);
+      const iso = days[di];
+      if (s > 0 && iso && (!startIso || iso >= startIso) && (!endIso || iso <= endIso)) {
+        const w = monday(iso);
+        const row = rows.get(w) || Object.fromEntries([["week", w], ["spend", 0], ...TS_BUCKETS.map(b => [b.key, 0])]);
+        const b = TS_BUCKETS.find(b => cum < b.max);
+        row[b.key] += s; row.spend += s;
+        rows.set(w, row);
+      }
+      cum += s;
+    }
+  }
+  return [...rows.values()].sort((x, y) => (x.week < y.week ? -1 : 1)).map(r => ({ ...r, label: r.week.slice(5) }));
 }

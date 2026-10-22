@@ -85,6 +85,53 @@ def load_definitions(path):
     return codes, names
 
 
+NOTION_PATH = ROOT / "data" / "notion_attributes.json"
+VARIANT_RE = re.compile(r"^(.*?)(?:\.\d+[a-z0-9]*)$", re.I)
+
+
+def norm_name(v):
+    """'Andrea-Vincente ' / 'andrea  vincente' -> 'Andrea Vincente' (people fields)."""
+    if not v:
+        return None
+    v = re.sub(r"[\s_]+", " ", re.sub(r"(?<=[A-Za-z])-(?=[A-Za-z])", " ", v.strip(" @"))).strip()
+    return " ".join(w[:1].upper() + w[1:] if w.islower() else w for w in v.split(" ")) or None
+
+
+def batch_of(creative_no):
+    """'1796.2' / '1796.5v3' -> '1796'; '245V2' stays (its own Notion card)."""
+    c = (creative_no or "").strip()
+    m = VARIANT_RE.match(c)
+    return (m.group(1) if m else c) or None
+
+
+def load_notion(codes):
+    """Number -> new attributes from the Notion B&B Ads export (codes resolved to
+    definition-sheet names). Duplicate numbers keep the most complete card."""
+    if not NOTION_PATH.exists():
+        return {}
+    d = json.loads(NOTION_PATH.read_text())
+    look = lambda sec, v: codes.get(sec, {}).get((v or "").upper(), v or None) if v else None
+    out = {}
+    for r in d["rows"]:
+        r = dict(zip(d["cols"], r))
+        rec = {
+            "concept": look("concepts", r["concept"]), "reason": look("reason", r["reason"]),
+            "angle": look("angles", r["angle"]) if r["angle"] not in ("OFFER", "TEST") else r["angle"].title(),
+            "avatar": (r["avatar"] or "").split("|")[0] or None, "type": look("type", r["type"]),
+            "format": look("formats", r["format"]), "origin": look("origin", r["origin"]) if r["origin"] != "NA" else "N/A",
+            "awareness_stage": look("awareness stage", r["awareness"]), "profile": r["profile"] or None,
+            "landing_page": (r["landing_page"] or "").split("|")[0].strip() or None,
+            "writer": r["writer"] or None, "editor": (r["editor"] or "").split("|")[0] or None,
+            "creator": (r["creator"] or "").split("|")[0] or None, "product": r["product"] or None,
+            "notion_launch": r["launch_date"] or None,
+        }
+        filled = sum(1 for k in ("concept", "reason", "angle", "format", "type") if rec[k])
+        key = r["number"].strip()
+        if key and (key not in out or filled > out[key][1]):
+            out[key] = (rec, filled)
+    return {k: v[0] for k, v in out.items()}
+
+
 def parse_new(name, codes):
     """New convention, '_'-separated, codes resolved through the definition sheet."""
     t = [x.strip() for x in name.split("_")]
@@ -144,7 +191,8 @@ def parse_old(name, legacy):
 
     # LP value holds the landing page and, after it, _B_<creative no>_<product>_<format>_<desc>
     lp_raw = tags.get("LP", "")
-    m = re.match(r"(.*?)_B_([^_]+)_([^_]+)_([^_]+)_?(.*)$", lp_raw)
+    # "PDP-PSO-JAR_B_1796.2_PSO_…" or, with no landing page, "B_370.3_PSO_…"
+    m = re.match(r"(?:(.*?)_)?B_([^_]+)_([^_]+)_([^_]+)_?(.*)$", lp_raw)
     lp, creative_no, product, fmt, desc = (m.groups() if m else (lp_raw, None, None, None, None))
     lp = (lp or "").split("|")[0].strip() or None
     if lp and lp.startswith("B_"):  # creative-number block landed in the LP slot
@@ -206,6 +254,7 @@ def meta_history_ads(ads, codes, legacy, start):
         spend = c["spend"] + (later.get("spend") or 0)
         out.append({
             "ad_name": c["ad_name"], "history": True, "carry_over": False, "mature": True,
+            "batch_no": batch_of(tags.get("creative_no")) or c["ad_name"],
             "date": lm[2:4] + lm[5:7] + "01", "launch_date": lm + "-01",
             "format": tags.get("format"), "type": tags.get("type"), "strategist": tags.get("strategist"),
             "concept": tags.get("concept"), "reason": tags.get("reason"), "angle": tags.get("angle"),
@@ -217,7 +266,18 @@ def meta_history_ads(ads, codes, legacy, start):
 
 
 def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=None, adjust_path=None):
-    codes, _ = load_definitions(defs_path)
+    codes, names = load_definitions(defs_path)
+    notion = load_notion(codes)
+    # Only definition-sheet values are allowed for the new-attribute dimensions;
+    # old-name tags that don't map show as untagged (Adam: new attributes only).
+    VALID = {"concept": "concepts", "reason": "reason", "angle": "angles", "format": "formats",
+             "type": "type", "origin": "origin"}
+    extra_ok = {"angle": {"offer", "test"}, "origin": {"n/a"}}
+    def valid(dim, v):
+        if not v:
+            return None
+        ok = names.get(VALID[dim], {})
+        return ok.get(v.lower()) or (v if v.lower() in extra_ok.get(dim, set()) else None)
     legacy = json.loads(pathlib.Path(legacy_path).read_text())
     rows = list(csv.DictReader(open(ads_path, encoding="utf-8"), delimiter="\t"))
 
@@ -275,6 +335,20 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
             tags = parse_old(key, legacy)
             convention, status = ("old", "Old key:value convention, mapped to new sheet") if tags else ("untagged", "Unrecognised name")
         tags = tags or {}
+        # New attributes live in Notion (Meta names aren't renamed yet): match the
+        # card by exact creative number, then by batch (variant suffix stripped).
+        cno = tags.get("creative_no")
+        batch = batch_of(cno)
+        n = notion.get((cno or "").strip()) or notion.get(batch or "")
+        if n and any(n[k] for k in ("concept", "reason", "angle", "format", "type")):
+            for k, v in n.items():
+                if v and k != "notion_launch":
+                    tags[k] = v
+            tags["strategist"] = n.get("writer") or tags.get("strategist")
+            convention, status = "notion", "New attributes from Notion (B&B Ads)"
+
+        for dim in VALID:
+            tags[dim] = valid(dim, tags.get(dim))
 
         firsts = sorted(r["first_day"] for r in rs if r.get("first_day"))
         d = firsts[0] if firsts else None
@@ -337,9 +411,12 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
             "origin": tags.get("origin"), "awareness_stage": aw,
             "funnel": FUNNEL_OF.get(aw), "length": tags.get("length"),
             "persuasion": tags.get("persuasion"), "static_type": tags.get("static_type"),
-            "strategist": tags.get("strategist"), "writer": tags.get("writer"), "editor": tags.get("editor"),
-            "creator": creator_of(key, tags.get("creator")),
-            "landing_page": tags.get("landing_page"),
+            "strategist": norm_name(tags.get("strategist")), "writer": norm_name(tags.get("writer")), "editor": norm_name(tags.get("editor")),
+            "creator": norm_name(creator_of(key, tags.get("creator"))),
+            "landing_page": tags.get("landing_page"), "profile": tags.get("profile"),
+            # Batch = the Notion card number without the variant suffix (1796.2 -> 1796);
+            # win rates consolidate variants on it.
+            "batch_no": batch or key,
             "naming_status": status, "reviewed": convention != "untagged", "convention": convention,
             "campaign": top.get("campaign_name"), "adset": top.get("adset_name"),
             "campaigns": sorted({r["campaign_name"] for r in rs if r.get("campaign_name")})[:3],
@@ -363,6 +440,11 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
     for i, a in enumerate(ads, 1):
         a["spend_rank"] = i
     history = meta_history_ads(ads, codes, legacy, start)
+    hp = ROOT / "data" / "meta_history.json"
+    if hp.exists():
+        pre = {c["ad_name"]: c["spend"] for c in json.loads(hp.read_text())["creatives"]}
+        for a in ads:
+            a["pre_spend"] = round(pre.get(a["ad_name"], 0.0), 2)
     tot = sum(a["metrics"]["spend"] for a in ads) or 1
     share = lambda c: sum(a["metrics"]["spend"] for a in ads if a["convention"] == c) / tot
     meta = sum(a["metrics"]["meta_rev"] for a in ads)
@@ -387,7 +469,8 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
         "has_nc_adj": bool(adj),
         "scope_note": (
             f"Every Meta ad that spent {start} → {end}, rolled up to {len(ads):,} creatives. "
-            f"{share('new'):.0%} of spend is on the new naming convention, {share('old'):.0%} on the old "
+            f"{share('notion'):.0%} of spend carries the new attributes from Notion (matched by batch number), "
+            f"{share('new'):.0%} the new naming convention, {share('old'):.0%} the old "
             f"key:value names (mapped onto the new Concept / Reason / Angle sheet), {share('untagged'):.0%} unrecognised. "
             "Revenue, ROAS and purchases are Meta-reported (7-day click / 1-day view); new-customer figures "
             "are the Triple Whale pixel (Triple Attribution + Views, 7-day window), the closest Triple Whale lens to Meta's. "
@@ -418,7 +501,7 @@ def main():
     g = lambda f: sum(x["metrics"][f] for x in ads)
     print(f"{len(ads)} creatives · spend ${sp:,.0f} · Meta rev ${g('meta_rev'):,.0f} (ROAS {g('meta_rev')/sp:.2f}x)"
           f" · NC rev ${g('nc_rev'):,.0f} (NCROAS {g('nc_rev')/sp:.2f}x)")
-    for c in ("new", "old", "untagged"):
+    for c in ("notion", "new", "old", "untagged"):
         s = sum(x["metrics"]["spend"] for x in ads if x["convention"] == c)
         print(f"  {c:<9} {sum(1 for x in ads if x['convention']==c):>5} creatives  ${s:>11,.0f}  {s/sp:5.1%}")
     print("coverage by spend:")
