@@ -138,6 +138,24 @@ def parse_new(name, codes):
     if len(t) < 11:
         return None
     type_codes = codes.get("type", {})
+    # Current Notion "new ad name" (16 slots, blanks = "N"):
+    # Number_LP_Product_ConceptName_Concept_Reason_Angle_Type_Format_Origin_Awareness_
+    # Writer_Editor_Creator_FBPage_LaunchDate — each field is identified by its slot,
+    # so the same person can appear as writer, editor and creator without ambiguity.
+    if len(t) == 16 and t[7].upper() in type_codes and t[9].upper() in codes.get("origin", {}):
+        look = lambda sec, v: codes.get(sec, {}).get((v or "").upper(), v or None)
+        v = lambda i: None if t[i] in ("", "N") else t[i]
+        people = lambda i: v(i) and v(i).split("+")[0]
+        aw = t[10]
+        aw_name = next((n for c, n in codes.get("awareness stage", {}).items()
+                        if c == aw.upper() or n.replace(" ", "").lower() == aw.replace(" ", "").lower()), aw)
+        return {
+            "creative_no": v(0), "landing_page": v(1), "product": v(2), "script": v(3),
+            "concept": look("concepts", t[4]), "reason": look("reason", t[5]), "angle": look("angles", t[6]),
+            "avatar": None, "type": look("type", t[7]), "format": look("formats", t[8]),
+            "origin": look("origin", t[9]), "awareness_stage": aw_name,
+            "writer": people(11), "editor": people(12), "creator": people(13), "profile": v(14),
+        }
     if t[7].upper() not in type_codes or t[9].upper() not in codes.get("origin", {}):
         return None
     look = lambda sec, v: codes.get(sec, {}).get((v or "").upper(), v or None)
