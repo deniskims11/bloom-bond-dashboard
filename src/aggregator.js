@@ -155,8 +155,10 @@ export function consolidate(ads) {
   return out;
 }
 
-export function winRate(ads, formatFilter = "blended", strategistFilter = "all") {
-  let filtered = consolidate(ads).filter(launchEligible);
+// `prepared`: the records are already one per net-new concept (manifest.launches,
+// dated by Meta "Date created"), so no consolidation or spend/age filter.
+export function winRate(ads, formatFilter = "blended", strategistFilter = "all", prepared = false) {
+  let filtered = prepared ? ads : consolidate(ads).filter(launchEligible);
   if (formatFilter !== "blended") {
     filtered = filtered.filter((a) => a.format === formatFilter);
   }

@@ -708,17 +708,34 @@ export default function Dashboard() {
   // (launches before the Triple Whale window, spend = Meta before it + TW after).
   const wrAds = useMemo(() => (dateMode === "activity" && canActivity ? lensAds : ads).concat(manifest?.history_ads ?? []),
     [ads, lensAds, manifest, dateMode, canActivity]);
-  const wrData = useMemo(() => winRate(wrAds, wrFormat, wrStrategist), [wrAds, wrFormat, wrStrategist]);
+  // Launch win rate from Meta's ad list: every net-new concept (Notion card number)
+  // in the month its first ad was created, spend or not; last 6 months.
+  const launchSet = useMemo(() => {
+    const L = manifest?.launches;
+    if (!L?.length) return null;
+    const byBatch = new Map();
+    for (const a of lensAds) { if (!byBatch.has(a.batch_no)) byBatch.set(a.batch_no, []); byBatch.get(a.batch_no).push(a); }
+    const d = new Date(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 5);
+    const from = d.toISOString().slice(0, 7);
+    return L.filter(l => l.launch_date.slice(0, 7) >= from).map(l => {
+      const recs = byBatch.get(l.batch_no) || [];
+      const top = recs.reduce((x, y) => (!x || y.metrics.spend > x.metrics.spend ? y : x), null) || {};
+      return { ...top, ...l, history: l.metrics.ncroas == null, variants: recs,
+        metrics: { ...(top.metrics || {}), spend: l.metrics.spend, ncroas: l.metrics.ncroas } };
+    });
+  }, [manifest, lensAds]);
+  const wrData = useMemo(() => (launchSet ? winRate(launchSet, wrFormat, wrStrategist, true) : winRate(wrAds, wrFormat, wrStrategist)),
+    [launchSet, wrAds, wrFormat, wrStrategist]);
   const strategistList = useMemo(
     () => Array.from(new Set(ads.map(a => a.strategist).filter(Boolean))).sort(),
     [ads]
   );
   // Strategist × win-rate matrix: one row per strategist, columns = thresholds.
   const wrByStrategist = useMemo(
-    () => ["(untagged)", ...strategistList].map(s => ({ name: s, rows: winRate(wrAds, wrFormat, s) }))
+    () => ["(untagged)", ...strategistList].map(s => ({ name: s, rows: launchSet ? winRate(launchSet, wrFormat, s, true) : winRate(wrAds, wrFormat, s) }))
       .map(x => ({ name: x.name, total: x.rows.find(r => r.month === "TOTAL") }))
       .filter(x => x.total && x.total.total > 0),
-    [wrAds, wrFormat, strategistList]
+    [launchSet, wrAds, wrFormat, strategistList]
   );
   const funnels = useMemo(() => toBreakdownRows(groupBy(ads, "funnel")), [ads]);
   const concepts = useMemo(() => toBreakdownRows(groupBy(ads, "concept")), [ads]);
@@ -1224,10 +1241,18 @@ export default function Dashboard() {
               <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 16, padding: "10px 14px", background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 8 }}>
                 <span style={{ fontSize: 13, lineHeight: 1.2 }}>ⓘ</span>
                 <div style={{ fontSize: 11, color: "#1e3a5f", lineHeight: 1.5 }}>
+                  {launchSet ? (<>
+                    <strong>How these are counted.</strong> A launch is a <strong>net-new concept</strong> (one Notion card number; ads without one count by name),
+                    placed in the month its first ad was <strong>created in Meta</strong> ("Date created", both ad accounts). Every published concept counts, spend or not;
+                    variants, duplicates and later copies of the same concept are not counted again. Thresholds use the concept's total Meta-reported spend
+                    (Ads Manager export through {manifest.launches_export_end}, plus Triple Whale spend after that).
+                    <strong> Efficient</strong> = spent $1K+ and beat the account NCROAS ({(BASELINE.ncroas).toFixed(2)}x); months tagged <strong>META</strong> predate the Triple Whale window, so they have no Efficient figure.
+                    New concepts created after {manifest.launches_export_end} appear once the Meta list is refreshed.
+                  </>) : (<>
                   <strong>How these are counted.</strong> A launch is a creative whose first-ever spend day falls inside the window and that is at least {manifest.mature_days ?? 14} days old,
                   so carry-over ads ({fmtNum(ads.filter(a => a.carry_over).length)}) and ads too new to judge ({fmtNum(ads.filter(a => !a.carry_over && a.mature === false).length)}) are left out.
                   Thresholds are lifetime-in-window spend. <strong>Efficient</strong> = spent $1K+ and beat the account NCROAS ({(BASELINE.ncroas).toFixed(2)}x).
-                  {(manifest.history_ads?.length > 0) && <> Months tagged <strong>META</strong> are launches from before the Triple Whale data starts, taken from the Meta Ads Manager export: spend = Meta spend up to {manifest.period.start} plus Triple Whale spend since (lifetime to date); no new-customer data, so no Efficient column for them.</>}
+                  </>)}
                 </div>
               </div>
             )}

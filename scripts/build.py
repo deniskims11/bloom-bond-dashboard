@@ -283,6 +283,60 @@ def meta_history_ads(ads, codes, legacy, start):
     return out
 
 
+LEAD_NO_RE = re.compile(r"^(\d+(?:\.\d+)?[a-z]?)_", re.I)
+
+
+def concept_key(name, codes, legacy):
+    """The concept an ad belongs to: its Notion card number (batch), else the name."""
+    tags = parse_new(name, codes) or parse_old(name, legacy) or {}
+    cno = tags.get("creative_no")
+    if not cno:
+        m = LEAD_NO_RE.match(name or "")
+        cno = m.group(1) if m else None
+    return batch_of(cno) or clean(name)
+
+
+def launch_records(ads, days, codes, legacy, notion):
+    """Launch win-rate cohorts from Meta's ad list (data/meta_created.json):
+    one record per net-new concept, dated by the earliest Meta "Date created" of
+    any of its ads, whether or not it ever spent. Spend for the thresholds is the
+    Meta-reported spend in the export plus Triple Whale spend after it."""
+    path = ROOT / "data" / "meta_created.json"
+    if not path.exists():
+        return [], None
+    mc = json.loads(path.read_text())
+    end = mc["export_end"]
+    after = {i for i, d in enumerate(days) if d > end}
+    recs = defaultdict(list)
+    for a in ads:
+        recs[a["batch_no"]].append(a)
+    g = defaultdict(lambda: {"c": "9999", "s": 0.0, "n": 0, "names": set()})
+    for r in mc["ads"]:
+        k = concept_key(r["n"], codes, legacy)
+        t = g[k]
+        t["c"] = min(t["c"], r["c"]); t["s"] += r["s"]; t["n"] += 1; t["names"].add(clean(r["n"]))
+    out = []
+    for k, t in g.items():
+        rs = recs.get(k, [])
+        later = sum(x[1] for a in rs for x in a["dd"] if x[0] in after)
+        tw_spend = sum(a["metrics"]["spend"] for a in rs)
+        nc = sum(a["metrics"].get("nc_rev_adj") or a["metrics"]["nc_rev"] for a in rs)
+        top = max(rs, key=lambda a: a["metrics"]["spend"]) if rs else {}
+        card = notion.get(k) or {}
+        attr = lambda f: top.get(f) or card.get(f)
+        spend = t["s"] + later
+        out.append({
+            "batch_no": k, "ad_name": top.get("ad_name") or sorted(t["names"])[0],
+            "date": t["c"][2:4] + t["c"][5:7] + t["c"][8:10], "launch_date": t["c"],
+            "meta_ads": t["n"], "names": len(t["names"]),
+            "format": attr("format"), "type": attr("type"), "strategist": attr("strategist") or card.get("writer"),
+            "concept": attr("concept"), "reason": attr("reason"), "angle": attr("angle"),
+            "metrics": {"spend": round(spend, 2), "ncroas": round(nc / tw_spend, 4) if tw_spend and nc else None},
+        })
+    out.sort(key=lambda x: x["launch_date"])
+    return out, end
+
+
 def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=None, adjust_path=None):
     codes, names = load_definitions(defs_path)
     notion = load_notion(codes)
@@ -465,6 +519,7 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
     for i, a in enumerate(ads, 1):
         a["spend_rank"] = i
     history = meta_history_ads(ads, codes, legacy, start)
+    launches, launch_src_end = launch_records(ads, days, codes, legacy, notion)
     hp = ROOT / "data" / "meta_history.json"
     if hp.exists():
         pre = {c["ad_name"]: c["spend"] for c in json.loads(hp.read_text())["creatives"]}
@@ -506,6 +561,8 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
         # Launch-cohort records from the Meta export (before the TW window), used
         # only by the Win Rate tab; spend = Meta before `start` + TW from `start`.
         "history_ads": history,
+        # Launch win rate (Meta "Date created", net-new concepts): see launch_records().
+        "launches": launches, "launches_export_end": launch_src_end,
     }
 
 
