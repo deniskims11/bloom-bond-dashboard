@@ -595,8 +595,9 @@ export default function Dashboard() {
   }, []);
   const [dateMode, setDateMode] = useState("activity");
   const [compare, setCompare] = useState("prev");
-  // New-customer lens: "adjusted" adds Meta's spend share of TW's Non-attributed +
-  // organic new-customer revenue (see fetch_tw_sql.py); "pixel" is TW as reported.
+  // New-customer lens: "adjusted" (Corrected) scales pre-Oct-19 pixel NC up to
+  // Meta-reported revenue/orders on the Meta channel (see fetch_tw_sql.py);
+  // "pixel" is TW as reported.
   const [ncLens, setNcLens] = useState("adjusted");
   const lensOn = ncLens === "adjusted" && !!manifest?.has_nc_adj;
   const lensBaseline = manifest ? { ...manifest.baseline, ncroas: lensOn ? manifest.baseline.ncroas_adj : manifest.baseline.ncroas } : null;
@@ -955,7 +956,7 @@ export default function Dashboard() {
   HAS_NC = manifest.has_nc !== false;
   setBaseline(lensBaseline);
   CMP.on = !!cmp && cmp.ads.length > 0; CMP.ads = cmp?.ads || []; CMP.label = cmp?.label || ""; CMP.cache = {};
-  if (lensOn) LBL.nc_sub = "Adjusted: TW pixel + Meta's spend share of unattributed / organic NC";
+  if (lensOn) LBL.nc_sub = "Corrected: pre-Oct 19 pixel NC scaled to Meta-reported";
   HAS_NV = (manifest.ads || []).some(a => a.metrics && a.metrics.visitors);
   const fromMaster = (manifest.source || "").startsWith("master-workbook");
 
@@ -1037,14 +1038,14 @@ export default function Dashboard() {
           <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "-6px 0 16px", flexWrap: "wrap" }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: "var(--bb-muted)", letterSpacing: 0.3 }}>NEW-CUSTOMER NUMBERS</span>
             <div style={{ display: "flex", gap: 3, background: "#fff", border: "1px solid var(--bb-line)", borderRadius: 8, padding: 2 }}>
-              {[["adjusted", "Adjusted"], ["pixel", "Pixel only"]].map(([k, l]) => (
+              {[["adjusted", "Corrected"], ["pixel", "Pixel only"]].map(([k, l]) => (
                 <button key={k} onClick={() => setNcLens(k)} style={{ padding: "4px 12px", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 11, fontWeight: 600,
                   background: ncLens === k ? "var(--bb-brown)" : "transparent", color: ncLens === k ? "#fff" : "var(--bb-muted)" }}>{l}</button>
               ))}
             </div>
             <span style={{ fontSize: 11, color: "var(--bb-muted)" }}>
               {lensOn
-                ? `Adjusted adds Meta's daily spend share of the new-customer revenue Triple Whale leaves "Non-attributed" or "organic" (untracked checkout / lander domains). Account NCROAS ${manifest.baseline.ncroas_adj?.toFixed(2)}x adjusted vs ${manifest.baseline.ncroas.toFixed(2)}x pixel.`
+                ? `Before the Oct 19 checkout fix the Triple Whale pixel missed part of Meta's orders. Corrected scales each day's pixel new-customer numbers up to what Meta reported that day (pixel's new-vs-returning split kept, Meta channel only); from Oct 19 the pixel is used as is. Account NCROAS ${manifest.baseline.ncroas_adj?.toFixed(2)}x corrected vs ${manifest.baseline.ncroas.toFixed(2)}x pixel.`
                 : `Triple Whale pixel as reported (Triple Attribution + Views, 7-day).`}
             </span>
           </div>

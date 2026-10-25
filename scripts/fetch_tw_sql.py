@@ -27,6 +27,8 @@ from datetime import date, datetime, timedelta, timezone
 from urllib import request as urlreq
 from urllib.error import HTTPError
 
+# Checkout fix (Adam, Oct 21 call): pixel matches Meta from this day on.
+PIXEL_FIX = "2026-10-19"
 API = "https://api.triplewhale.com/api/v2/orcabase/api/sql"
 SHOP = "6f36e3-2.myshopify.com"
 CLEAN_START = "2026-09-05"
@@ -128,33 +130,22 @@ def main():
         GROUP BY ad_id""", LAUNCH_LOOKBACK, e, key)
     print(f"  ads {len(meta)} · launch {len(launch)}")
 
-    # Adjusted NC: TW books a big share of new-customer revenue as "Non-attributed"
-    # or "organic_and_social" (untracked custom checkout, lander domains seen as
-    # referrers). Per day, give Meta its share of paid spend of that pool.
-    chan = sql(f"""
-        SELECT toString(event_date) AS d, channel, sum(spend) AS spend,
-               sum(new_customer_order_revenue) AS nc_rev, sum(new_customer_orders) AS nc_orders
-        FROM pixel_joined_tvf()
-        WHERE model = 'Triple Attribution + Views' AND attribution_window = '7_days'
-          AND event_date BETWEEN '{s}' AND '{e}'
-        GROUP BY d, channel""", s, e, key)
-    per_day = defaultdict(lambda: {"meta_nc": 0.0, "meta_nco": 0.0, "meta_spend": 0.0, "paid": 0.0, "pool": 0.0, "pool_o": 0.0})
-    for r in chan:
+    # Corrected NC (Meta only). Until the checkout fix on PIXEL_FIX the TW pixel
+    # missed part of Meta's orders, so its new-customer numbers run low. Per day,
+    # scale pixel NC by Meta-reported ÷ pixel revenue (orders for NC orders) on
+    # the Meta channel itself — the pixel's new-vs-returning split is kept, no
+    # other channel's revenue is borrowed. From PIXEL_FIX on, pixel is used as is.
+    per_day = defaultdict(lambda: [0.0, 0.0, 0.0, 0.0])
+    for r in daily:
         t = per_day[r["d"][:10]]
-        if r["channel"] == "facebook-ads":
-            t["meta_nc"] += f(r["nc_rev"]); t["meta_nco"] += f(r["nc_orders"]); t["meta_spend"] += f(r["spend"])
-        if f(r["spend"]) > 0:
-            t["paid"] += f(r["spend"])
-        if r["channel"] in ("Non-attributed", "organic_and_social"):
-            t["pool"] += f(r["nc_rev"]); t["pool_o"] += f(r["nc_orders"])
+        t[0] += f(r["meta_rev"]); t[1] += f(r["px_rev"]); t[2] += f(r["meta_conv"]); t[3] += f(r["px_orders"])
     with open(out / "tw_nc_adjust.csv", "w") as fh:
-        fh.write("date;factor;order_factor;meta_nc;alloc\n")
-        for dte, t in sorted(per_day.items()):
-            share = t["meta_spend"] / t["paid"] if t["paid"] else 0
-            alloc, alloc_o = t["pool"] * share, t["pool_o"] * share
-            fac = (t["meta_nc"] + alloc) / t["meta_nc"] if t["meta_nc"] else 1
-            ofac = (t["meta_nco"] + alloc_o) / t["meta_nco"] if t["meta_nco"] else 1
-            fh.write(f"{dte};{fac:.4f};{ofac:.4f};{t['meta_nc']:.2f};{alloc:.2f}\n")
+        fh.write("date;factor;order_factor;meta_rev;pixel_rev\n")
+        for dte, (mr, pr, mc, po) in sorted(per_day.items()):
+            pre = dte < PIXEL_FIX
+            fac = min(3.0, max(1.0, mr / pr)) if (pre and pr) else 1.0
+            ofac = min(3.0, max(1.0, mc / po)) if (pre and po) else 1.0
+            fh.write(f"{dte};{fac:.4f};{ofac:.4f};{mr:.2f};{pr:.2f}\n")
     if not daily or not meta:
         sys.exit("Triple Whale returned no rows — refusing to overwrite the dashboard")
 

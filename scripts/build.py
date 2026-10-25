@@ -319,8 +319,8 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
                 r = dict(zip(dcols, l.split(";")))
                 daily[r["ad_id"]].append(r)
     days = sorted({r["date"] for rs in daily.values() for r in rs})
-    # Per-day adjusted-NC factors (fetch_tw_sql.py): Meta's spend share of the
-    # Non-attributed + organic new-customer pool, as a multiplier on pixel NC.
+    # Per-day corrected-NC factors (fetch_tw_sql.py): Meta-reported ÷ pixel
+    # revenue/orders on the Meta channel before the Oct 19 pixel fix, else 1.
     adj = {}
     if adjust_path and pathlib.Path(adjust_path).exists():
         for l in pathlib.Path(adjust_path).read_text().splitlines()[1:]:
