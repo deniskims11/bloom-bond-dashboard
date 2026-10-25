@@ -1206,7 +1206,7 @@ export default function Dashboard() {
             </div>
 
             <div style={{ background: "#fff", borderRadius: 10, padding: 20, border: "1px solid #E8DCD0" }}>
-              <h3 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 16px", color: "#3a2429" }}>Creatives Launched per Month <span style={{ fontWeight: 400, fontSize: 11, color: "#b0978f" }}>· by first spend day; carry-over creatives excluded</span></h3>
+              <h3 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 16px", color: "#3a2429" }}>Creatives Launched per Month <span style={{ fontWeight: 400, fontSize: 11, color: "#b0978f" }}>· by Meta "Date created" (net-new concepts are on the Win Rate tab); carry-over creatives excluded</span></h3>
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={monthlyData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F5EDE5" />

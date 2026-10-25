@@ -520,6 +520,18 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
         a["spend_rank"] = i
     history = meta_history_ads(ads, codes, legacy, start)
     launches, launch_src_end = launch_records(ads, days, codes, legacy, notion)
+    # Launch date everywhere = the concept's Meta "Date created" (earliest ad of its
+    # batch). Ads created after the export keep their first spend day until the
+    # Meta list is refreshed. No minimum age: the month created is the only rule.
+    created = {l["batch_no"]: l["launch_date"] for l in launches}
+    for a in ads:
+        c = created.get(a["batch_no"])
+        if c:
+            a["date"], a["launch_date"] = c[2:4] + c[5:7] + c[8:10], c
+        a["carry_over"] = bool(a["date"] and a["date"] < start_yy)
+        a["mature"] = True
+        a["launch_status"] = "Carry-over (created before window)" if a["carry_over"] else "Launched in window"
+        a["date_source"] = "meta_created" if c else "first_spend"
     hp = ROOT / "data" / "meta_history.json"
     if hp.exists():
         pre = {c["ad_name"]: c["spend"] for c in json.loads(hp.read_text())["creatives"]}
@@ -554,7 +566,7 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
             f"key:value names (mapped onto the new Concept / Reason / Angle sheet), {share('untagged'):.0%} unrecognised. "
             "Revenue, ROAS and purchases are Meta-reported (7-day click / 1-day view); new-customer figures "
             "are the Triple Whale pixel (Triple Attribution + Views, 7-day window), the closest Triple Whale lens to Meta's. "
-            f"Launch win rates count only creatives first spending inside the window and at least {MATURE_DAYS} days old."
+            "Launch dates are each concept's Meta \"Date created\" (earliest ad of its Notion card number)."
         ),
         "ad_count": len(ads),
         "ads": ads,
