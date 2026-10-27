@@ -311,7 +311,10 @@ def launch_records(ads, days, codes, legacy, notion):
     for a in ads:
         recs[a["batch_no"]].append(a)
     g = defaultdict(lambda: {"c": "9999", "s": 0.0, "n": 0, "names": set()})
+    import name_map
     for r in mc["ads"]:
+        if name_map.is_flexible(r["n"]):
+            continue  # several concepts in one ad: not a net-new concept launch
         k = concept_key(r["n"], codes, legacy)
         t = g[k]
         t["c"] = min(t["c"], r["c"]); t["s"] += r["s"]; t["n"] += 1; t["names"].add(clean(r["n"]))
@@ -340,6 +343,13 @@ def launch_records(ads, days, codes, legacy, notion):
 def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=None, adjust_path=None):
     codes, names = load_definitions(defs_path)
     notion = load_notion(codes)
+    # Ad-ID -> new-name mapping (data/name_map.csv, see name_map.py): only rows
+    # that pass validation are applied; the mapped name wins over Notion.
+    import name_map
+    nt_snap = json.loads(NOTION_PATH.read_text()) if NOTION_PATH.exists() else {"rows": [], "cols": []}
+    name_map_valid, name_map_problems = name_map.validate(name_map.load_rows(), codes, nt_snap["rows"], nt_snap["cols"])
+    people = name_map.people_index(nt_snap["rows"], nt_snap["cols"])
+    person = lambda v: people.get(re.sub(r"[^a-z]", "", (v or "").lower()), v) if v else v
     # Only definition-sheet values are allowed for the new-attribute dimensions;
     # old-name tags that don't map show as untagged (Adam: new attributes only).
     VALID = {"concept": "concepts", "reason": "reason", "angle": "angles", "format": "formats",
@@ -386,6 +396,8 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
 
     groups = defaultdict(list)
     for r in rows:
+        if r["ad_id"] in name_map_valid:
+            r["orig_ad_name"], r["ad_name"] = r["ad_name"], name_map_valid[r["ad_id"]]
         if num(r["spend"]) > 0:
             groups[clean(r["ad_name"])].append(r)
 
@@ -403,6 +415,17 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
 
         tags = parse_new(key, codes)
         convention, status = "new", "New convention (definition sheet)"
+        mapped = any(r.get("orig_ad_name") for r in rs)
+        if mapped and tags:
+            convention, status = "mapped", "Renamed via the ad-name mapping (data/name_map.csv)"
+            for k in ("concept", "reason", "angle"):
+                if (tags.get(k) or "").upper() in ("OFFER", "TEST"):
+                    tags[k] = tags[k].title()
+            if (tags.get("origin") or "").upper() == "NA":
+                tags["origin"] = "N/A"
+            for k in ("writer", "editor", "creator"):
+                tags[k] = person(tags.get(k))
+            tags["strategist"] = tags.get("writer")
         if not tags:
             tags = parse_old(key, legacy)
             convention, status = ("old", "Old key:value convention, mapped to new sheet") if tags else ("untagged", "Unrecognised name")
@@ -419,7 +442,7 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
         cno = tags.get("creative_no")
         batch = batch_of(cno)
         n = notion.get((cno or "").strip()) or notion.get(batch or "")
-        if n and any(n[k] for k in ("concept", "reason", "angle", "format", "type")):
+        if n and not mapped and any(n[k] for k in ("concept", "reason", "angle", "format", "type")):
             for k, v in n.items():
                 if v and k != "notion_launch":
                     tags[k] = v
@@ -428,6 +451,13 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
 
         for dim in VALID:
             tags[dim] = valid(dim, tags.get(dim))
+        # Flexible ads bundle several concepts in one ad; Meta can't split their
+        # spend by creative, so they get their own value instead of a concept.
+        if name_map.is_flexible(key):
+            FLEX = "Flexible (multi-concept)"
+            for dim in ("concept", "reason", "angle", "format"):
+                tags[dim] = FLEX
+            convention, status = "flexible", "Flexible ad: several concepts in one ad"
 
         firsts = sorted(r["first_day"] for r in rs if r.get("first_day"))
         d = firsts[0] if firsts else None
@@ -481,6 +511,7 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
         mature = bool(date and (end_dt - datetime.strptime("20" + date, "%Y%m%d")).days >= MATURE_DAYS)
         ads.append({
             "ad_name": key,
+            "orig_ad_name": next((r["orig_ad_name"] for r in rs if r.get("orig_ad_name")), None),
             "new_ad_name": key if convention == "new" else None,
             "creative_no": tags.get("creative_no"), "product": tags.get("product"),
             "concept": tags.get("concept"), "reason": tags.get("reason"),
@@ -575,6 +606,8 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
         "history_ads": history,
         # Launch win rate (Meta "Date created", net-new concepts): see launch_records().
         "launches": launches, "launches_export_end": launch_src_end,
+        "name_map": {"applied": len(name_map_valid), "problems": len(name_map_problems),
+                     "mapped_ads": sum(1 for a in ads if a["convention"] == "mapped")},
     }
 
 
