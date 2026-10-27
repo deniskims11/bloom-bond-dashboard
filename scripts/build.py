@@ -89,6 +89,18 @@ NOTION_PATH = ROOT / "data" / "notion_attributes.json"
 VARIANT_RE = re.compile(r"^(.*?)(?:\.\d+[a-z0-9]*)$", re.I)
 
 
+def norm_lp(v):
+    """One spelling per landing page, as the Notion formula writes it: 'LP_14' / 'LP 14' -> 'LP14',
+    'Product page' -> 'PDP-PSO-JAR'."""
+    if not v:
+        return None
+    v = v.strip()
+    m = re.fullmatch(r"LP[\s_-]*(\d+)", v, re.I)
+    if m:
+        return f"LP{int(m.group(1))}"
+    return "PDP-PSO-JAR" if v.lower() == "product page" else v
+
+
 def norm_name(v):
     """'Andrea-Vincente ' / 'andrea  vincente' -> 'Andrea Vincente' (people fields)."""
     if not v:
@@ -143,12 +155,12 @@ def parse_new(name, codes):
     # Writer_Editor_Creator_FBPage_LaunchDate — each field is identified by its slot,
     # so the same person can appear as writer, editor and creator without ambiguity.
     if len(t) == 16 and t[7].upper() in type_codes and t[9].upper() in codes.get("origin", {}):
-        look = lambda sec, v: codes.get(sec, {}).get((v or "").upper(), v or None)
         v = lambda i: None if t[i] in ("", "N") else t[i]
+        look = lambda sec, x: (codes.get(sec, {}).get(x.upper(), x) if x not in (None, "", "N") else None)
         people = lambda i: v(i) and v(i).split("+")[0]
-        aw = t[10]
+        aw = t[10] if t[10] not in ("", "N") else ""
         aw_name = next((n for c, n in codes.get("awareness stage", {}).items()
-                        if c == aw.upper() or n.replace(" ", "").lower() == aw.replace(" ", "").lower()), aw)
+                        if aw and (c == aw.upper() or n.replace(" ", "").lower() == aw.replace(" ", "").lower())), aw or None)
         return {
             "creative_no": v(0), "landing_page": v(1), "product": v(2), "script": v(3),
             "concept": look("concepts", t[4]), "reason": look("reason", t[5]), "angle": look("angles", t[6]),
@@ -442,6 +454,24 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
         cno = tags.get("creative_no")
         batch = batch_of(cno)
         n = notion.get((cno or "").strip()) or notion.get(batch or "")
+        if n and mapped:
+            # Mapping wins where it has a value; an "N" (blank) slot means unknown,
+            # so it falls back to the Notion card for that field only.
+            for k, v in n.items():
+                if v and k != "notion_launch" and not tags.get(k):
+                    tags[k] = v
+            if not tags.get("strategist"):
+                tags["strategist"] = tags.get("writer")
+        if mapped:
+            # Still-blank slots: last resort is what the original Meta name said.
+            orig = next((r["orig_ad_name"] for r in rs if r.get("orig_ad_name")), "")
+            old = parse_new(orig, codes) or parse_old(orig, legacy) or {}
+            for k in ("concept", "reason", "angle", "avatar", "type", "format", "origin", "awareness_stage",
+                      "landing_page", "writer", "editor", "creator", "profile", "product"):
+                if not tags.get(k) and old.get(k):
+                    tags[k] = person(old[k]) if k in ("writer", "editor", "creator") else old[k]
+            if not tags.get("strategist"):
+                tags["strategist"] = tags.get("writer") or old.get("strategist")
         if n and not mapped and any(n[k] for k in ("concept", "reason", "angle", "format", "type")):
             for k, v in n.items():
                 if v and k != "notion_launch":
@@ -523,7 +553,7 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
             "persuasion": tags.get("persuasion"), "static_type": tags.get("static_type"),
             "strategist": norm_name(tags.get("strategist")), "writer": norm_name(tags.get("writer")), "editor": norm_name(tags.get("editor")),
             "creator": norm_name(creator_of(key, tags.get("creator"))),
-            "landing_page": tags.get("landing_page"), "profile": tags.get("profile"),
+            "landing_page": norm_lp(tags.get("landing_page")), "profile": tags.get("profile"),
             # Batch = the Notion card number without the variant suffix (1796.2 -> 1796);
             # win rates consolidate variants on it.
             "batch_no": batch or key,

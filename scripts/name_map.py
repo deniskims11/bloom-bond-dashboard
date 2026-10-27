@@ -62,16 +62,30 @@ def people_index(notion_rows, notion_cols):
     return idx
 
 
-def check_name(new, allowed):
-    """List of problems with one new name (empty = valid)."""
+CARD_RE = re.compile(r"^(.*?)(?:\.\d+[a-z0-9]*)$", re.I)
+
+
+def card_of(number):
+    """'1796.2' / '1850.1v3' / 'MTRX32.2' -> the Notion card number ('1796', '1850', 'MTRX32')."""
+    m = CARD_RE.match(number or "")
+    return ((m.group(1) if m else number) or "").upper()
+
+
+def check_name(new, allowed, cards=None):
+    """List of problems with one new name (empty = valid). WARNING-prefixed items don't block."""
     errs = []
-    if "|" in new:
-        errs.append('contains "|"')
     t = new.split("_")
     if len(t) != 16:
         return errs + [f"{len(t)} parts (needs exactly 16, '_'-separated; no '_' inside a value)"]
-    if not re.fullmatch(r"\d+(\.\d+)?[a-z]?", t[0], re.I):
-        errs.append(f"Number '{t[0]}' is not a card number like 370.3")
+    if "|" in "_".join(t[:3] + t[4:]):
+        errs.append('contains "|" outside the Concept Name part')
+    elif "|" in t[3]:
+        errs.append('WARNING: "|" inside Concept Name (harmless, all 16 parts read correctly)')
+    num = t[0].strip()
+    if not re.fullmatch(r"[A-Za-z]{0,8}\d+([vV]\d+)?(\.\d+)?([a-zA-Z]\d*)?", num):
+        errs.append(f"Number '{num}' is not a card number like 370.3 / MTRX32.2")
+    elif cards is not None and card_of(num) not in cards and not re.fullmatch(r"\d+(\.\d+)?", num):
+        errs.append(f"Number '{num}' (card {card_of(num)}) is not a card in the Notion snapshot")
     for i, ok in allowed.items():
         v = t[i].strip()
         if v in ("", "N"):
@@ -100,6 +114,8 @@ def load_rows(path=MAP_PATH):
 def validate(rows, codes, notion_rows, notion_cols, known_ids=None):
     """-> (valid {ad_id: new_name}, problems [(line, ad_id, message)])."""
     allowed = allowed_codes(codes, notion_rows, notion_cols)
+    ncol = notion_cols.index("number") if "number" in notion_cols else None
+    cards = {str(r[ncol]).strip().upper() for r in notion_rows} if ncol is not None else None
     problems, valid = [], {}
     by_id = defaultdict(set)
     for r in rows:
@@ -115,7 +131,10 @@ def validate(rows, codes, notion_rows, notion_cols, known_ids=None):
         if not new:
             errs.append("New ad name is empty")
         else:
-            errs += check_name(new, allowed)
+            errs += check_name(new, allowed, cards)
+        warns = [e for e in errs if e.startswith("WARNING")]
+        errs = [e for e in errs if not e.startswith("WARNING")]
+        problems += [(line, aid, w) for w in warns]
         if errs:
             problems += [(line, aid, e) for e in errs]
         else:
