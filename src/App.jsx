@@ -20,7 +20,7 @@ const MAX_AN_RULES = 8;
 const DEPTH_BG = ["transparent", "#FBF5F0", "#F5EDE5", "#EFE3D8", "#E9DACD"];
 const depthBg = (d) => DEPTH_BG[Math.min(d, DEPTH_BG.length - 1)];
 const TABS = ["Overview", "Win Rate", "Strategists", "Concepts", "Reasons", "Angles", "Avatars", "Formats", "NVP Buckets", "Breakdowns", "Analysis", "Data Clean Up"];
-const THRESHOLDS = ["$1K", "$5K", "$15K", "$25K", "$50K", "$100K", "$150K+"];
+const THRESHOLDS = ["$1K", "$5K", "$10K", "$15K", "$25K", "$50K", "$100K", "$150K+"];
 
 // Coloured relative to the account baseline (set from the manifest), so the
 // badges separate better-than-average from worse-than-average instead of all
@@ -409,6 +409,7 @@ function BreakdownTable({ rows, nameLabel = "Name", onRowClick, dim }) {
     { key: "cpa", label: "CPA (Meta)" },
     ...(HAS_NC ? [{ key: "nccpa", label: "NC CPA" }] : []),
     { key: "winRate1k", label: "WR $1K" },
+    { key: "winRate10k", label: "WR $10K" },
     { key: "winRate15k", label: "WR $15K" },
     { key: "winRate50k", label: "WR $50K" },
     ...(HAS_NC ? [{ key: "effRate", label: "Efficient WR" }] : []),
@@ -441,7 +442,7 @@ function BreakdownTable({ rows, nameLabel = "Name", onRowClick, dim }) {
             <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{r.aov ? `$${r.aov.toFixed(0)}` : "—"}</td>
             <td style={{ ...td, textAlign: "right", fontWeight: 600 }}>{r.cpa ? `$${r.cpa.toFixed(0)}` : "—"}<Delta cur={r.cpa} prev={r._p === "new" ? "new" : r._p?.cpa} inverse /></td>
             {HAS_NC && <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{r.nccpa ? `$${r.nccpa.toFixed(0)}` : "—"}<Delta cur={r.nccpa} prev={r._p === "new" ? "new" : r._p?.nccpa} inverse /></td>}
-            {[r.winRate1k, r.winRate15k, r.winRate50k, ...(HAS_NC ? [r.effRate] : [])].map((v, j) => (
+            {[r.winRate1k, r.winRate10k, r.winRate15k, r.winRate50k, ...(HAS_NC ? [r.effRate] : [])].map((v, j) => (
               <td key={j} title={`${r.eligible ?? "?"} launches eligible`} style={{ ...td, textAlign: "right", color: (r.eligible ?? 99) < 5 ? "#cbb8b0" : td.color }}>
                 {(r.eligible ?? 1) === 0 ? "—" : fmtPct(v)}
               </td>
@@ -1491,6 +1492,7 @@ export default function Dashboard() {
                     name: g.name, creatives: g.count, ads: g.ads, spend: g.spend, revenue: g.rev, roas: g.roas,
                     pct_new: g.pct_new, purchases: g.txns, aov: g.aov, cpm: g.cpm,
                     winRate1k: (g.ads.filter(a => (a.metrics.spend||0) >= 1000).length / (g.ads.length||1)) * 100,
+                    winRate10k: (g.ads.filter(a => (a.metrics.spend||0) >= 10000).length / (g.ads.length||1)) * 100,
                     winRate15k: (g.ads.filter(a => (a.metrics.spend||0) >= 15000).length / (g.ads.length||1)) * 100,
                     winRate50k: (g.ads.filter(a => (a.metrics.spend||0) >= 50000).length / (g.ads.length||1)) * 100,
                   }))} nameLabel="Angle × Concept" onRowClick={r => openModal(r.name, `${r.creatives} ads · Spend ${fmt(r.spend)}`, r.ads)} />

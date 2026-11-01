@@ -6,6 +6,8 @@
 const THRESHOLDS = [
   { key: "$1K", min: 1000 },
   { key: "$5K", min: 5000 },
+  // B&B's internal win definition (Adam): $10K+ spend.
+  { key: "$10K", min: 10000 },
   { key: "$15K", min: 15000 },
   { key: "$25K", min: 25000 },
   { key: "$50K", min: 50000 },
@@ -235,6 +237,7 @@ export function toBreakdownRows(groups) {
       cpm: g.cpm,
       cpc: g.cpc,
       winRate1k: wr(1000),
+      winRate10k: wr(10000),
       winRate15k: wr(15000),
       winRate50k: wr(50000),
       effRate: spenders.length ? (spenders.filter(isEfficientWin).length / spenders.length) * 100 : 0,

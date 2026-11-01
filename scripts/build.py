@@ -30,7 +30,8 @@ import json
 import pathlib
 import re
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
+from urllib import parse
 from datetime import datetime, timezone
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -99,6 +100,81 @@ def norm_lp(v):
     if m:
         return f"LP{int(m.group(1))}"
     return "PDP-PSO-JAR" if v.lower() == "product page" else v
+
+
+# Landing page as written on the Meta ad itself ("LP:LP_32 | …", "LP:PDP-PSO-JAR _B_…",
+# "2131.1_LP31_…", "704.1_PDP-PSO-JAR_…"). One creative is often run against several
+# landing pages, so the card's LP in Notion / the mapping can't say which one an ad used.
+AD_LP_RE = re.compile(r"(?:^|[_:\s])(LP[_ ]?\d+|PDP-[A-Z][A-Z-]*[A-Z])(?=[_\s|]|$)", re.I)
+
+
+def ad_lp(name):
+    m = AD_LP_RE.search(name or "")
+    return norm_lp(m.group(1)) if m else None
+
+
+def with_lp(new_name, lp):
+    """Put the ad's own landing page into slot 2 of a 16-slot mapped name."""
+    t = (new_name or "").split("_")
+    if lp and len(t) == 16 and norm_lp(t[1]) != lp:
+        t[1] = lp
+        return "_".join(t)
+    return new_name
+
+
+FORMAT_CODES = None  # set in build(): lower-case code -> definition-sheet format
+CF_FORMATS = {"ugc yapper": "UGCTalkingHead", "ugc": "UGCTalkingHead", "pixar": "AnimPixarStory",
+              "ai voiceover": "AIVOBroll", "native": "NativeStory", "ai song": "AnimPixarSong",
+              "bold claim": "StaticHeadline"}
+
+
+def static_kind(text, pc):
+    t = text.lower()
+    if "offer" in pc or any(w in t for w in ("% off", "sale", "buy 2", "buy 3", "get 1 free", "get 2 free",
+                                                "black friday", "bfcm", "restock", "discount", "bogo")):
+        return "StaticOffer"
+    w = set(re.split(r"[^a-z]+", t))
+    if {"before", "after"} <= w:
+        return "StaticBeforeAfter"
+    for keys, fmt in (({"timeline"}, "StaticTimeline"), ({"meme"}, "StaticMeme"), ({"letter"}, "StaticFounderLetter"),
+                      ({"vs", "versus", "comparison"}, "StaticComparison")):
+        if keys & w:
+            return fmt
+    if "comparison" in pc:
+        return "StaticComparison"
+    return None
+
+
+def infer_format(name):
+    """Format for names that don't carry a definition-sheet format: a sheet code
+    anywhere in the name, else the old convention's format word (+ PC: tag), else
+    agency (CF) / creator-platform naming. None when it can't be told."""
+    n = name or ""
+    for tok in re.split(r"[_\-\s|()/.,]+", n):
+        if FORMAT_CODES and tok.lower() in FORMAT_CODES:
+            return FORMAT_CODES[tok.lower()]
+    pc = (re.search(r"PC:([^_]*)", n) or [None, ""])[1].lower()
+    m = re.search(r"B_[^_]+_[^_]+_([^_]+)_(.*)", n)
+    if m and n.lstrip("RA |").startswith("LP:"):
+        word, rest = m.group(1).strip().lower(), m.group(2)
+        if "native" in word:
+            return "NativeEducational" if ("education" in pc or "authority" in pc) else "NativeStory"
+        if word.startswith("image") or "static" in word:
+            return static_kind(rest.split("_PC:")[0], pc)
+        if "animation" in word:
+            r = rest.lower()
+            return ("AnimPixarSong" if "song" in r else "AnimClaymation" if "clay" in r
+                    else "AnimCharacter" if any(w in r for w in ("character", "follicle", "bottle")) else "AnimPixarStory")
+        return None
+    m = re.search(r"_(Video|Image)_NN_([^_]+)_", n)
+    if n.startswith("(CF)") and m:
+        kind = CF_FORMATS.get(m.group(2).strip().lower())
+        if kind:
+            return kind
+        return static_kind(n, pc) if m.group(1) == "Image" else None
+    if "trybe=" in n.lower() or AD_BOUNTY_RE.search(n):
+        return "UGCTalkingHead"  # creator platforms: a real creator on camera
+    return None
 
 
 def norm_name(v):
@@ -406,10 +482,27 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
     didx = {d: i for i, d in enumerate(days)}
     DD = ["spend", "meta_rev", "meta_conv", "nc_rev", "nc_orders", "nv", "vis", "imps", "clk", "px_rev", "px_orders"]
 
+    global FORMAT_CODES
+    FORMAT_CODES = {v.lower(): v for v in names.get("formats", {}).values()}
+    # Landing page per Meta ad. Best: the ad's real destination URL (Meta API,
+    # fetch_meta.py), labelled with the LP code most ads using that URL carry in
+    # their name. Else the LP written on the Meta ad name. Notion / the mapping
+    # only describe the card, and one card runs against several pages.
+    url_path = lambda u: parse.urlsplit(u).path.rstrip("/").lower() if u else None
+    votes = defaultdict(Counter)
+    for r in rows:
+        if url_path(r.get("dest_url")) and ad_lp(r["ad_name"]):
+            votes[url_path(r["dest_url"])][ad_lp(r["ad_name"])] += num(r["spend"]) or 0.01
+    for r in rows:
+        v = votes.get(url_path(r.get("dest_url")))
+        r["_lp"] = (v.most_common(1)[0][0] if v else None) or ad_lp(r["ad_name"]) or \
+            (url_path(r.get("dest_url")) or "").split("/")[-1] or None
     groups = defaultdict(list)
     for r in rows:
         if r["ad_id"] in name_map_valid:
-            r["orig_ad_name"], r["ad_name"] = r["ad_name"], name_map_valid[r["ad_id"]]
+            # The mapped name's LP comes from the card; the Meta ad's own LP wins
+            # (and splits ads of one creative run against different pages).
+            r["orig_ad_name"], r["ad_name"] = r["ad_name"], with_lp(name_map_valid[r["ad_id"]], r["_lp"])
         if num(r["spend"]) > 0:
             groups[clean(r["ad_name"])].append(r)
 
@@ -479,6 +572,12 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
             tags["strategist"] = n.get("writer") or tags.get("strategist")
             convention, status = "notion", "New attributes from Notion (B&B Ads)"
 
+        meta_name = next((r["orig_ad_name"] for r in rs if r.get("orig_ad_name")), key)
+        own_lp = top.get("_lp")
+        if own_lp:
+            tags["landing_page"] = own_lp
+        if not valid("format", tags.get("format")):
+            tags["format"] = infer_format(meta_name) or infer_format(key)
         for dim in VALID:
             tags[dim] = valid(dim, tags.get(dim))
         # Flexible ads bundle several concepts in one ad; Meta can't split their

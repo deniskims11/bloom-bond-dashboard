@@ -78,6 +78,49 @@ def fmt(v):
     return str(int(v)) if v == int(v) else str(v)
 
 
+META_FIELDS = ("spend", "meta_rev", "meta_conv", "imps", "clk")
+
+
+def merge_meta(out, daily, meta):
+    """Meta-direct numbers (scripts/fetch_meta.py) replace Triple Whale's copy of
+    spend, Meta-reported revenue / purchases, impressions and outbound clicks, per
+    ad per day, and Meta's current ad names win. Pixel / new-customer / visitor
+    columns stay Triple Whale. Without Meta files everything stays Triple Whale."""
+    md, ma = out / "meta_daily.csv", out / "meta_ads.tsv"
+    if not (md.exists() and ma.exists()):
+        print("  Meta-direct files missing: Triple Whale for all metrics")
+        return daily, meta, {}
+    lines = md.read_text().splitlines()
+    cols = lines[0].split(";")
+    m = {}
+    for l in lines[1:]:
+        r = dict(zip(cols, l.split(";")))
+        m[(r["ad_id"], r["date"])] = r
+    tw = {(str(r["ad_id"]), r["d"][:10]): r for r in daily}
+    for key, r in tw.items():
+        x = m.get(key)
+        for k in META_FIELDS:
+            r[k] = f(x[k]) if x else 0.0
+    added = 0
+    for key, x in m.items():
+        if key not in tw and f(x["spend"]) > 0:
+            r = {k: 0.0 for k in DAILY}
+            r.update(ad_id=key[0], d=key[1], **{k: f(x[k]) for k in META_FIELDS})
+            daily.append(r)
+            added += 1
+    ads = {}
+    for i, l in enumerate(ma.read_text().splitlines()):
+        if i:
+            v = l.split("\t")
+            ads[v[0]] = {"ad_id": v[0], "ad_name": v[1], "adset": v[2], "campaign": v[3], "account": v[4], "url": v[7]}
+    names = {str(r["ad_id"]): r for r in meta}
+    for ad in {str(r["ad_id"]) for r in daily}:
+        if ad in ads:
+            names[ad] = dict(names.get(ad, {}), ad_id=ad, **{k: ads[ad][k] for k in ("ad_name", "adset", "campaign", "account")})
+    print(f"  Meta-direct merged: {len(m)} Meta ad-days, {added} not in Triple Whale; Meta names for {len(ads)} ads")
+    return daily, list(names.values()), {a: x["url"] for a, x in ads.items() if x["url"]}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(ROOT / "raw"))
@@ -86,6 +129,8 @@ def main():
     key = os.environ.get("TW_API_KEY")
     if not key:
         sys.exit("TW_API_KEY is not set")
+    # Meta-direct pull first (no-op without META_ACCESS_TOKEN; never fails the refresh).
+    subprocess.run([sys.executable, str(ROOT / "scripts" / "fetch_meta.py"), "--out", a.out])
 
     end = datetime.now(timezone.utc).date()
     start = max(date.fromisoformat(CLEAN_START), end - timedelta(days=MAX_DAYS - 1))
@@ -129,6 +174,7 @@ def main():
                         WHERE {WHERE} AND event_date BETWEEN '{s}' AND '{e}' AND spend > 0)
         GROUP BY ad_id""", LAUNCH_LOOKBACK, e, key)
     print(f"  ads {len(meta)} · launch {len(launch)}")
+    daily, meta, meta_urls = merge_meta(out, daily, meta)
 
     # Corrected NC (Meta only). Until the checkout fix on PIXEL_FIX the TW pixel
     # missed part of Meta's orders, so its new-customer numbers run low. Per day,
@@ -173,7 +219,7 @@ def main():
 
     cols = ["ad_id", "ad_name", "adset_name", "campaign_name", "account_id", "spend", "impressions", "clicks",
             "meta_rev", "meta_conv", "pixel_rev", "pixel_orders", "nc_rev", "nc_orders", "new_visitors",
-            "visitors", "first_day", "spend_d14", "nc_rev_d14", "image_url"]
+            "visitors", "first_day", "spend_d14", "nc_rev_d14", "image_url", "dest_url"]
     clean = lambda v: str(v or "").replace("\t", " ").replace("\n", " ")
     with open(out / "tw_ads.tsv", "w") as fh:
         fh.write("\t".join(cols) + "\n")
@@ -193,7 +239,7 @@ def main():
                                 clean(n.get("account"))] +
                                [fmt(t[k]) for k in ("spend", "imps", "clk", "meta_rev", "meta_conv", "px_rev",
                                                     "px_orders", "nc_rev", "nc_orders", "nv", "vis")] +
-                               [fd, fmt(s14), fmt(n14), clean(l.get("image_url"))]) + "\n")
+                               [fd, fmt(s14), fmt(n14), clean(l.get("image_url")), clean(meta_urls.get(ad))]) + "\n")
 
     print(f"spend ${sum(f(r['spend']) for r in daily):,.0f} across {len(by_ad)} ads")
     if not a.no_build:
