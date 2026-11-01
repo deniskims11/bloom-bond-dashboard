@@ -274,14 +274,14 @@ function AdListModal({ open, title, subtitle, ads, onClose, days, range, initial
                 <SortHeader label="Spend" col="spend" sort={sort} setSort={setSort} />
                 <SortHeader label="Revenue" col="rev" sort={sort} setSort={setSort} />
                 <SortHeader label="ROAS" col="roas" sort={sort} setSort={setSort} />
-                <SortHeader label="% New Cust." col="nc_txns" sort={sort} setSort={setSort} />
+                <SortHeader label="% New Visitors" col="pct_new_visitors" sort={sort} setSort={setSort} />
                 <SortHeader label="Outbound clicks" col="clicks" sort={sort} setSort={setSort} />
                 <SortHeader label="Txns" col="txns" sort={sort} setSort={setSort} />
               </tr>
             </thead>
             <tbody>
               {sortedAds.slice(0, 500).map((a, i) => {
-                const pctNew = a.metrics.pixel_txns ? (a.metrics.nc_txns / a.metrics.pixel_txns) * 100 : null;
+                const pctNew = a.metrics.visitors ? (a.metrics.new_visitors / a.metrics.visitors) * 100 : null;
                 const adIds = a.meta_ad_ids || [];
                 const managerUrl = adIds[0] ? `https://business.facebook.com/adsmanager/manage/ads?selected_ad_ids=${adIds[0]}` : null;
                 const previewUrl = a.preview_link || managerUrl;
@@ -2005,7 +2005,7 @@ function TreeTable({ nodes, dimLabels, onLeafClick, onDaily, tendency, prevMap, 
           {sortHeader("Revenue", "rev")}
           {sortHeader("ROAS", "roas")}
           {HAS_NC && sortHeader("NCROAS", "ncroas")}
-          {sortHeader("% New Cust.", "pct_new")}
+          {sortHeader("% New Visitors", "pct_new_visitors")}
           {sortHeader("Purchases", "txns")}
           {sortHeader("AOV", "aov")}
           {sortHeader("CPM", "cpm")}
@@ -2030,7 +2030,7 @@ function TreeTable({ nodes, dimLabels, onLeafClick, onDaily, tendency, prevMap, 
             <td style={{ ...td, textAlign: "right" }}>{fmt(r.n.agg.rev)}{delta(r.path, "rev", r.n.agg.rev)}</td>
             <td style={{ ...td, textAlign: "right" }}><RoasBadge roas={r.n.agg.roas} />{delta(r.path, "roas", r.n.agg.roas)}</td>
             {HAS_NC && <td style={{ ...td, textAlign: "right" }}><RoasBadge roas={r.n.agg.ncroas} base="ncroas" />{delta(r.path, "ncroas", r.n.agg.ncroas)}</td>}
-            <td style={{ ...td, textAlign: "right" }}>{fmtPct(r.n.agg.pct_new)}</td>
+            <td style={{ ...td, textAlign: "right" }}>{fmtPct(r.n.agg.pct_new_visitors)}</td>
             <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtNum(r.n.agg.txns)}</td>
             <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{r.n.agg.aov ? `$${r.n.agg.aov.toFixed(0)}` : "—"}</td>
             <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{r.n.agg.cpm ? `$${r.n.agg.cpm.toFixed(1)}` : "—"}{delta(r.path, "cpm", r.n.agg.cpm, true)}</td>
