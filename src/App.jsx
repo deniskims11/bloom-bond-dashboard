@@ -183,6 +183,23 @@ function sortRows(rows, col, dir) {
   });
 }
 
+// Ads Manager link that opens the ad inside its own ad account (and business), so
+// people with several accounts don't land in their personal one.
+const AD_ACCOUNT_BUSINESS = {
+  "2138674693666259": "1041179378721075", // SLD Ad Acc 1 · SLD Ecommerce LLC
+};
+function adsManagerUrl(account, adIds) {
+  const ids = (adIds || []).filter(Boolean);
+  if (!ids.length) return null;
+  const act = String(account || "").replace(/^act_/, "");
+  if (!act) return `https://adsmanager.facebook.com/adsmanager/manage/ads?selected_ad_ids=${ids[0]}`;
+  const biz = AD_ACCOUNT_BUSINESS[act];
+  const filter = `SEARCH_BY_AD-GROUP_IDS-STRING_SET\u001EANY\u001E${JSON.stringify(ids.slice(0, 50))}`;
+  const q = [`act=${act}`, biz && `business_id=${biz}`, biz && `global_scope_id=${biz}`,
+    `filter_set=${encodeURIComponent(filter)}`].filter(Boolean).join("&");
+  return `https://adsmanager.facebook.com/adsmanager/manage/ads?${q}`;
+}
+
 // --------- Ad list modal (shown when a bucket row is clicked) ---------
 function AdListModal({ open, title, subtitle, ads, onClose, days, range, initialMode }) {
   const [sort, setSort] = useState({ col: "spend", dir: "desc" });
@@ -283,7 +300,7 @@ function AdListModal({ open, title, subtitle, ads, onClose, days, range, initial
               {sortedAds.slice(0, 500).map((a, i) => {
                 const pctNew = a.metrics.visitors ? (a.metrics.new_visitors / a.metrics.visitors) * 100 : null;
                 const adIds = a.meta_ad_ids || [];
-                const managerUrl = adIds[0] ? `https://business.facebook.com/adsmanager/manage/ads?selected_ad_ids=${adIds[0]}` : null;
+                const managerUrl = adsManagerUrl(a.ad_account, adIds);
                 const previewUrl = a.preview_link || managerUrl;
                 const previewTitle = a.preview_link
                   ? `Preview the creative (no login). Meta ad ID: ${adIds[0] || "?"}`
