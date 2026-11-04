@@ -125,6 +125,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(ROOT / "raw"))
     ap.add_argument("--no-build", action="store_true")
+    ap.add_argument("--no-encrypt", action="store_true", help="local runs only: keep latest.json readable")
     a = ap.parse_args()
     key = os.environ.get("TW_API_KEY")
     if not key:
@@ -245,6 +246,9 @@ def main():
     if not a.no_build:
         subprocess.run([sys.executable, str(ROOT / "scripts" / "build.py"), str(out / "tw_ads.tsv"),
                         str(out / "tw_weekly.csv"), s, e, str(out / "tw_daily.csv"), str(out / "tw_nc_adjust.csv")], check=True)
+        # Published data is always encrypted (fails the deploy if the password secret is missing).
+        if not a.no_encrypt:
+            subprocess.run([sys.executable, str(ROOT / "scripts" / "encrypt_data.py")], check=True)
 
 
 if __name__ == "__main__":

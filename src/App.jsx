@@ -183,6 +183,59 @@ function sortRows(rows, col, dir) {
   });
 }
 
+// --------- Password gate (the published data is encrypted at build time) ---------
+const KEY_STORE = "bb_dashboard_key_v1";
+const b64bytes = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const loadSavedKey = () => { try { return localStorage.getItem(KEY_STORE) || sessionStorage.getItem(KEY_STORE); } catch { return null; } };
+const forgetKey = () => { try { localStorage.removeItem(KEY_STORE); sessionStorage.removeItem(KEY_STORE); } catch {} };
+async function decryptManifest(p, password, savedKey) {
+  let raw;
+  if (savedKey) raw = b64bytes(savedKey);
+  else {
+    const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
+    raw = new Uint8Array(await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: b64bytes(p.salt), iterations: p.iterations }, base, 256));
+  }
+  const key = await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["decrypt"]);
+  const gz = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64bytes(p.iv) }, key, b64bytes(p.data));
+  const json = await new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
+  const m = JSON.parse(json);
+  m._key = btoa(String.fromCharCode(...raw));
+  return m;
+}
+function PasswordGate({ payload, onOpen }) {
+  const [pw, setPw] = useState("");
+  const [remember, setRemember] = useState(true);
+  const [state, setState] = useState("idle");
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!pw) return;
+    setState("busy");
+    try {
+      const m = await decryptManifest(payload, pw);
+      try { (remember ? localStorage : sessionStorage).setItem(KEY_STORE, m._key); } catch {}
+      delete m._key;
+      onOpen(m);
+    } catch { setState("bad"); }
+  };
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#FBF7F3", fontFamily: "system-ui, sans-serif", padding: 16 }}>
+      <form onSubmit={submit} style={{ background: "#fff", border: "1px solid #E8DCD0", borderRadius: 12, padding: 28, width: "100%", maxWidth: 360 }}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: "#3B2A26", marginBottom: 4 }}>Creative Performance</div>
+        <div style={{ fontSize: 13, color: "#8a6f68", marginBottom: 18 }}>Enter the team password to open the dashboard.</div>
+        <input type="password" autoFocus value={pw} onChange={e => { setPw(e.target.value); setState("idle"); }} placeholder="Password"
+          style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", border: `1px solid ${state === "bad" ? "#b91c1c" : "#D8C8BC"}`, borderRadius: 8, fontSize: 14 }} />
+        {state === "bad" && <div style={{ color: "#b91c1c", fontSize: 12, marginTop: 6 }}>Wrong password.</div>}
+        <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12, color: "#8a6f68", margin: "12px 0 16px" }}>
+          <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} /> Remember on this device
+        </label>
+        <button type="submit" disabled={state === "busy"} style={{ width: "100%", padding: "10px 12px", border: "none", borderRadius: 8, background: "#CC6138", color: "#fff", fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
+          {state === "busy" ? "Unlocking…" : "Open dashboard"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 // Ads Manager link that opens the ad inside its own ad account (and business), so
 // people with several accounts don't land in their personal one.
 const AD_ACCOUNT_BUSINESS = {
@@ -561,6 +614,7 @@ function multiGroupBy(ads, dims) {
 export default function Dashboard() {
   const [manifest, setManifest] = useState(null);
   const [error, setError] = useState(null);
+  const [locked, setLocked] = useState(null); // encrypted payload waiting for the password
   const [tab, setTab] = useState("Overview");
 
   // Win Rate state
@@ -647,7 +701,12 @@ export default function Dashboard() {
         if (!r.ok) throw new Error(`${r.status}: ${r.statusText}`);
         return r.json();
       })
-      .then(setManifest)
+      .then(async m => {
+        if (!m.encrypted) return setManifest(m);
+        setLocked(m);
+        const saved = loadSavedKey();
+        if (saved) { try { const d = await decryptManifest(m, null, saved); delete d._key; setManifest(d); setLocked(null); } catch { forgetKey(); } }
+      })
       .catch(e => setError(String(e)));
     // Mappings are owned by GitHub (data/mappings.json) — fetch fresh every
     // load. The cache-buster prevents raw.githubusercontent.com's ~5 min CDN
@@ -986,6 +1045,7 @@ export default function Dashboard() {
   };
 
   if (error) return <div style={{ padding: 24, fontFamily: "sans-serif", color: "#991b1b" }}>Error loading data: {error}</div>;
+  if (locked && !manifest) return <PasswordGate payload={locked} onOpen={m => { setManifest(m); setLocked(null); }} />;
   if (!manifest) return <div style={{ padding: 24, fontFamily: "sans-serif", color: "#8a6f68" }}>Loading data…</div>;
 
   HAS_NC = manifest.has_nc !== false;
