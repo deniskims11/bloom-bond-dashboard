@@ -41,6 +41,24 @@ FUNNEL_OF = {"Unaware": "TOF", "Problem Aware": "TOF", "Solution Aware": "MOF",
 AWARENESS = ["Unaware", "Problem Aware", "Solution Aware", "Product Aware", "Most Aware"]
 
 
+# Ads Manager link that opens the ad inside its own ad account (and business),
+# so people with several ad accounts don't land in their personal one.
+AD_ACCOUNT_BUSINESS = {"2138674693666259": "1041179378721075"}  # SLD Ad Acc 1 · SLD Ecommerce LLC
+
+
+def ads_manager_url(account, ad_id):
+    from urllib.parse import quote
+    act = str(account or "").removeprefix("act_")
+    if not act:
+        return f"https://adsmanager.facebook.com/adsmanager/manage/ads?selected_ad_ids={ad_id}"
+    q = [f"act={act}"]
+    biz = AD_ACCOUNT_BUSINESS.get(act)
+    if biz:
+        q += [f"business_id={biz}", f"global_scope_id={biz}"]
+    q.append("filter_set=" + quote(f'SEARCH_BY_AD-GROUP_IDS-STRING_SET\x1eANY\x1e["{ad_id}"]', safe=""))
+    return "https://adsmanager.facebook.com/adsmanager/manage/ads?" + "&".join(q)
+
+
 def norm_awareness(v):
     """'SolutionAware' (sheet) and 'Solution Aware' (old names) -> 'Solution Aware'."""
     key = (v or "").replace(" ", "").lower()
@@ -672,7 +690,7 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
             "wk": [[k, round(v[0], 2), round(v[1], 2), round(v[2], 2), v[3]] for k, v in sorted(wk.items())],
             "thumbnail_candidates": [],
             "thumbnail_url": image,
-            "preview_link": f"https://business.facebook.com/adsmanager/manage/ads?selected_ad_ids={top['ad_id']}",
+            "preview_link": ads_manager_url(top.get("account_id"), top["ad_id"]),
         })
 
     ads.sort(key=lambda a: -a["metrics"]["spend"])
