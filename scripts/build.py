@@ -590,6 +590,14 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
             tags["strategist"] = n.get("writer") or tags.get("strategist")
             convention, status = "notion", "New attributes from Notion (B&B Ads)"
 
+        # New-convention names carry the writer but no strategist slot, and many
+        # have no Notion card yet: the writer is the strategist, as on the cards.
+        for k in ("writer", "editor", "creator"):
+            if tags.get(k):
+                tags[k] = person(tags[k])
+        if not tags.get("strategist") and tags.get("writer"):
+            tags["strategist"] = tags["writer"]
+
         meta_name = next((r["orig_ad_name"] for r in rs if r.get("orig_ad_name")), key)
         own_lp = top.get("_lp")
         if own_lp:
