@@ -55,7 +55,7 @@ def ads_manager_url(account, ad_id):
     biz = AD_ACCOUNT_BUSINESS.get(act)
     if biz:
         q += [f"business_id={biz}", f"global_scope_id={biz}"]
-    q.append("filter_set=" + quote(f'SEARCH_BY_AD-GROUP_IDS-STRING_SET\x1eANY\x1e["{ad_id}"]', safe=""))
+    q.append("filter_set=" + quote(f'SEARCH_BY_ADGROUP_IDS-STRING_SET\x1eANY\x1e["{ad_id}"]', safe=""))
     return "https://adsmanager.facebook.com/adsmanager/manage/ads?" + "&".join(q)
 
 
