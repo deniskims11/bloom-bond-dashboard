@@ -194,10 +194,10 @@ function adsManagerUrl(account, adIds) {
   const act = String(account || "").replace(/^act_/, "");
   if (!act) return `https://adsmanager.facebook.com/adsmanager/manage/ads?selected_ad_ids=${ids[0]}`;
   const biz = AD_ACCOUNT_BUSINESS[act];
-  const filter = `SEARCH_BY_ADGROUP_IDS-STRING_SET\u001EANY\u001E${JSON.stringify(ids.slice(0, 50))}`;
+  // The ad's edit view shows its preview and also opens archived/deleted ads.
   const q = [`act=${act}`, biz && `business_id=${biz}`, biz && `global_scope_id=${biz}`,
-    `filter_set=${encodeURIComponent(filter)}`].filter(Boolean).join("&");
-  return `https://adsmanager.facebook.com/adsmanager/manage/ads?${q}`;
+    `selected_ad_ids=${ids[0]}`].filter(Boolean).join("&");
+  return `https://adsmanager.facebook.com/adsmanager/manage/ads/edit/standalone?${q}`;
 }
 
 // --------- Ad list modal (shown when a bucket row is clicked) ---------
