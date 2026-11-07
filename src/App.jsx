@@ -21,7 +21,7 @@ const fmtPct = (n) => n == null ? "—" : `${Number(n).toFixed(1)}%`;
 const MAX_AN_RULES = 8;
 const DEPTH_BG = ["transparent", "#FBF5F0", "#F5EDE5", "#EFE3D8", "#E9DACD"];
 const depthBg = (d) => DEPTH_BG[Math.min(d, DEPTH_BG.length - 1)];
-const TABS = ["Overview", "Attribution", "Win Rate", "Strategists", "Concepts", "Reasons", "Angles", "Avatars", "Formats", "NVP Buckets", "Breakdowns", "Analysis", "Data Clean Up"];
+const TABS = ["Overview", "Attribution", "Win Rate", "Strategists", "Agencies", "Concepts", "Reasons", "Angles", "Avatars", "Formats", "NVP Buckets", "Breakdowns", "Analysis", "Data Clean Up"];
 const THRESHOLDS = ["$1K", "$5K", "$10K", "$15K", "$25K", "$50K", "$100K", "$150K+"];
 
 // Coloured relative to the account baseline (set from the manifest), so the
@@ -762,6 +762,9 @@ export default function Dashboard() {
   const stratWeekly = useMemo(() => (canActivity
     ? weeklyFromDaily(ads, manifest.days, wkRange[0], wkRange[1], "strategist", 8)
     : { rows: [], keys: [] }), [ads, manifest, canActivity, wkRange[0], wkRange[1]]);
+  const agencyWeekly = useMemo(() => (canActivity
+    ? weeklyFromDaily(ads.filter(a => a.agency && a.agency !== "In-house"), manifest.days, wkRange[0], wkRange[1], "agency", 9)
+    : { rows: [], keys: [] }), [ads, manifest, canActivity, wkRange[0], wkRange[1]]);
   const weeklyMix = useMemo(() => (canActivity
     ? weeklyFromDaily(ads, manifest.days, wkRange[0], wkRange[1], wkDim, 6)
     : weekly(ads, manifest?.weeks, wkDim, 6)), [ads, manifest, canActivity, wkDim, wkRange[0], wkRange[1]]);
@@ -817,6 +820,8 @@ export default function Dashboard() {
   );
   const formats = useMemo(() => toBreakdownRows(groupBy(ads, "format")), [ads]);
   const strategists = useMemo(() => toBreakdownRows(groupBy(ads, "strategist")), [ads]);
+  const agencies = useMemo(() => toBreakdownRows(groupBy(ads, "agency")), [ads]);
+  const makers = useMemo(() => toBreakdownRows(groupBy(ads, "maker")), [ads]);
   const launchStatuses = useMemo(() => toBreakdownRows(groupBy(ads, "launch_status")), [ads]);
   // Generic one-dimension breakdowns (Bloom & Bond naming fields).
   const EXTRA_BD = { "Reason": "reason", "Origin": "origin", "Type": "type",
@@ -1460,6 +1465,39 @@ export default function Dashboard() {
                     <Legend wrapperStyle={{ fontSize: 11 }} itemSorter={(it) => stratWeekly.keys.indexOf(it.value)} />
                     {stratWeekly.keys.map((k, i) => (
                       <Bar key={k} dataKey={k} stackId="st" name={k}
+                        fill={["#3A1B11", "#CC6138", "#0e7490", "#7c3aed", "#15803d", "#be185d", "#b45309", "#64748b", "#cbb8b0"][i % 9]} />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === "Agencies" && (
+          <div>
+            <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "1px solid #E8DCD0", overflowX: "auto", marginBottom: 16 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 4px", color: "#3a2429" }}>Agency leaderboard ({agencies.length})</h3>
+              <p style={{ fontSize: 11, color: "#b0978f", margin: "0 0 12px" }}>Spend and results in the selected date range, by who made the ad: agencies (code in the ad number, e.g. MRNO2.6, or the "(CF)" prefix), creator platforms (trybe, Ad Bounty) and in-house (numbered Notion cards). Click a row for its ads; sort by any column.</p>
+              <BreakdownTable rows={agencies} nameLabel="Agency" dim="agency" onRowClick={r => openModal(`Agency: ${r.name}`, `${r.creatives} creatives · Spend ${fmt(r.spend)}`, r.ads)} />
+            </div>
+            <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "1px solid #E8DCD0", overflowX: "auto", marginBottom: 16 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 4px", color: "#3a2429" }}>Agencies vs strategists ({makers.length})</h3>
+              <p style={{ fontSize: 11, color: "#b0978f", margin: "0 0 12px" }}>One leaderboard: each agency and creator platform next to each in-house strategist, so their efficiency (ROAS, NCROAS, CPA, win rate) compares like for like. Sort by any column.</p>
+              <BreakdownTable rows={makers} nameLabel="Agency / strategist" dim="maker" onRowClick={r => openModal(r.name, `${r.creatives} creatives · Spend ${fmt(r.spend)}`, r.ads)} />
+            </div>
+            {agencyWeekly.rows.length > 0 && (
+              <div style={{ background: "#fff", borderRadius: 10, padding: 20, border: "1px solid #E8DCD0" }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 16px", color: "#3a2429" }}>Weekly spend by agency (in-house excluded)</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={agencyWeekly.rows}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F5EDE5" />
+                    <XAxis dataKey="week" tick={{ fontSize: 11, fill: "#b0978f" }} />
+                    <YAxis tick={{ fontSize: 11, fill: "#b0978f" }} tickFormatter={v => fmt(v)} />
+                    <Tooltip formatter={(v) => fmtFull(v)} itemSorter={(it) => (it.name === "Other" ? Infinity : -(it.value || 0))} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} itemSorter={(it) => agencyWeekly.keys.indexOf(it.value)} />
+                    {agencyWeekly.keys.map((k, i) => (
+                      <Bar key={k} dataKey={k} stackId="ag" name={k}
                         fill={["#3A1B11", "#CC6138", "#0e7490", "#7c3aed", "#15803d", "#be185d", "#b45309", "#64748b", "#cbb8b0"][i % 9]} />
                     ))}
                   </BarChart>

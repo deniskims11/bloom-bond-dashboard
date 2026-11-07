@@ -127,7 +127,7 @@ export default function Attribution({ attr, days, start, end }) {
       const v = zero();
       for (const r of a[5]) if (r[0] >= lo && r[0] <= hi) add(v, r);
       const set = sets[a[2]];
-      const node = { kind: "a", i, key: `a:${i}`, id: a[0], name: a[1], si: a[2], ci: set?.ci, status: a[3], account: a[4], v, dd: a[5] };
+      const node = { kind: "a", i, key: `a:${i}`, id: a[0], name: a[1], si: a[2], ci: set?.ci, status: a[3], account: a[4], v, dd: a[5], img: a[6] || "" };
       if (set) { set.kids.push(node); for (let j = 0; j < N; j++) set.v[j] += v[j]; }
       return node;
     });
@@ -364,6 +364,7 @@ export default function Attribution({ attr, days, start, end }) {
               <tr>
                 <th style={{ ...th, width: 28, cursor: "default" }} />
                 <th style={{ ...th, textAlign: "left", cursor: "default" }}>Status</th>
+                <th style={{ ...th, textAlign: "center", cursor: "default" }}>Preview</th>
                 <th style={{ ...th, textAlign: "left", minWidth: 280 }} onClick={() => setSort(["name", sort[0] === "name" ? -sort[1] : 1])}>Name{sort[0] === "name" ? (sort[1] < 0 ? " ↓" : " ↑") : ""}</th>
                 {COLS.map(([k, label, , src]) => (
                   <th key={k} style={th} onClick={() => setSort([k, sort[0] === k ? -sort[1] : -1])}>
@@ -382,6 +383,15 @@ export default function Attribution({ attr, days, start, end }) {
                       <input type="checkbox" checked={isPicked} onChange={() => toggle(picked, setPicked, n.key)} title="Chart this row" />
                     </td>
                     <td style={{ ...td, textAlign: "left" }}><StatusDot status={n.status} /></td>
+                    <td style={{ ...td, textAlign: "center", padding: "4px 8px", width: 56 }}>
+                      {n.kind === "a" && n.img ? (
+                        <a href={url} target="_blank" rel="noopener noreferrer" onClick={e => openExternal(e, url)} title="Open in Ads Manager" style={{ display: "inline-block", lineHeight: 0 }}>
+                          <img src={n.img} alt="" loading="lazy" referrerPolicy="no-referrer"
+                            onError={e => { e.currentTarget.style.display = "none"; }}
+                            style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 4, border: `1px solid ${LINE}`, display: "block" }} />
+                        </a>
+                      ) : null}
+                    </td>
                     <td style={{ ...td, textAlign: "left", maxWidth: 420, overflow: "hidden", textOverflow: "ellipsis", paddingLeft: 10 + depth * 18 }} title={n.name}>
                       {canOpen ? (
                         <button onClick={() => toggle(open, setOpen, n.key)} style={{ border: "none", background: "none", cursor: "pointer", color: MUTED, padding: "0 6px 0 0", fontSize: 11 }}>{open.has(n.key) ? "▾" : "▸"}</button>
@@ -396,13 +406,13 @@ export default function Attribution({ attr, days, start, end }) {
                 );
               })}
               {!rowsOut.length && (
-                <tr><td colSpan={COLS.length + 3} style={{ ...td, textAlign: "center", color: MUTED, padding: 24 }}>Nothing spent in this date range{activeOnly ? " among active rows" : ""}.</td></tr>
+                <tr><td colSpan={COLS.length + 4} style={{ ...td, textAlign: "center", color: MUTED, padding: 24 }}>Nothing spent in this date range{activeOnly ? " among active rows" : ""}.</td></tr>
               )}
             </tbody>
             <tfoot>
               <tr style={{ background: "#FDF9F6" }}>
                 <td style={{ ...td, fontWeight: 700 }} />
-                <td style={{ ...td, fontWeight: 700, textAlign: "left" }} colSpan={2}>Total · {top.length.toLocaleString()} {level === "campaign" ? "campaigns" : level === "adset" ? "ad sets" : "ads"}</td>
+                <td style={{ ...td, fontWeight: 700, textAlign: "left" }} colSpan={3}>Total · {top.length.toLocaleString()} {level === "campaign" ? "campaigns" : level === "adset" ? "ad sets" : "ads"}</td>
                 {COLS.map(([k, , f]) => <td key={k} style={{ ...td, fontWeight: 700 }}>{k === "budget" ? "" : f({ kind: "t", m: shownTotal })}</td>)}
               </tr>
             </tfoot>

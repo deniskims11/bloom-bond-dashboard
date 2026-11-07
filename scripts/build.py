@@ -754,6 +754,12 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
         pre = {c["ad_name"]: c["spend"] for c in json.loads(hp.read_text())["creatives"]}
         for a in ads:
             a["pre_spend"] = round(pre.get(a["ad_name"], 0.0), 2)
+    for a in ads:
+        a["agency"] = agency_of(a)
+        # Agencies vs strategists on one leaderboard: agency / creator platform, or
+        # the in-house strategist who made it.
+        a["maker"] = (a.get("strategist") or "In-house · no strategist") if a["agency"] == "In-house" else (
+            a["agency"] if "creators" in a["agency"] or a["agency"] == "Other" else f"{a['agency']} (agency)")
     tot = sum(a["metrics"]["spend"] for a in ads) or 1
     share = lambda c: sum(a["metrics"]["spend"] for a in ads if a["convention"] == c) / tot
     meta = sum(a["metrics"]["meta_rev"] for a in ads)
@@ -795,6 +801,28 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
         "name_map": {"applied": len(name_map_valid), "problems": len(name_map_problems),
                      "mapped_ads": sum(1 for a in ads if a["convention"] == "mapped")},
     }
+
+AGENCY_CODES = {"MRNO", "MANA", "MTRX", "CBR", "WADS", "CF"}
+
+
+def agency_of(a):
+    """Who made the ad: an agency (code in the creative number, e.g. MRNO2.6, or the
+    "(CF)" prefix), a creator platform (trybe, Ad Bounty) or in-house (numbered)."""
+    name = a.get("ad_name") or ""
+    orig = a.get("orig_ad_name") or ""
+    if name.startswith("(CF)") or orig.startswith("(CF)"):
+        return "CF"
+    if "trybe=" in name or "trybe=" in orig:
+        return "Trybe (creators)"
+    if "Ad Bounty" in name or "Ad Bounty" in orig:
+        return "Ad Bounty (creators)"
+    m = re.match(r"^([A-Za-z]+)", a.get("creative_no") or "")
+    if m and m.group(1).upper() in AGENCY_CODES:
+        return m.group(1).upper()
+    if re.match(r"^\d", a.get("creative_no") or "") or re.search(r"(^|[ _|])\d{3,4}\.\d", name):
+        return "In-house"
+    return "Other"
+
 
 def build_attribution(ads_path, daily_path, days):
     """Campaign > ad set > ad tree with per-day numbers for the Attribution tab.
@@ -858,7 +886,8 @@ def build_attribution(ads_path, daily_path, days):
         if not dd:
             continue
         acct = (m_ad.get("account") or tw.get("account_id") or "").replace("act_", "")
-        out_ads.append([ad_id, m_ad.get("name") or tw.get("ad_name") or ad_id, si, m_ad.get("status", ""), acct, dd])
+        out_ads.append([ad_id, m_ad.get("name") or tw.get("ad_name") or ad_id, si, m_ad.get("status", ""), acct, dd,
+                        tw.get("image_url") or ""])
     return {
         "campaigns": [v[1:] for v in sorted(camps.values())],
         "adsets": [v[1:] for v in sorted(adsets.values())],
