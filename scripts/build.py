@@ -474,7 +474,19 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
     nt_snap = json.loads(NOTION_PATH.read_text()) if NOTION_PATH.exists() else {"rows": [], "cols": []}
     name_map_valid, name_map_problems = name_map.validate(name_map.load_rows(), codes, nt_snap["rows"], nt_snap["cols"])
     people = name_map.people_index(nt_snap["rows"], nt_snap["cols"])
-    person = lambda v: people.get(re.sub(r"[^a-z]", "", (v or "").lower()), v) if v else v
+    # Short names in ad names ("Diego", "Athena") -> the one full name with that
+    # first name (Diego Shakaj, Athena Diago); left as-is when it's ambiguous.
+    by_first = defaultdict(set)
+    for full in set(people.values()):
+        by_first[re.sub(r"[^a-z]", "", full.split()[0].lower())].add(full)
+    def person(v):
+        if not v:
+            return v
+        k = re.sub(r"[^a-z]", "", v.lower())
+        if k in people:
+            return people[k]
+        firsts = by_first.get(k, set())
+        return next(iter(firsts)) if len(firsts) == 1 else v
     # Only definition-sheet values are allowed for the new-attribute dimensions;
     # old-name tags that don't map show as untagged (Adam: new attributes only).
     VALID = {"concept": "concepts", "reason": "reason", "angle": "angles", "format": "formats",
