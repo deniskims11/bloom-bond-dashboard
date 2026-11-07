@@ -264,6 +264,23 @@ def parse_new(name, codes):
             "origin": look("origin", t[9]), "awareness_stage": aw_name,
             "writer": people(11), "editor": people(12), "creator": people(13), "profile": v(14),
         }
+    # Notion names with blank type/origin slots ("2083.5_…_N_N_DiegoShakaj_HarshHegde_N_
+    # Bloom & Bond_23.10.26") still carry the people: keep at least those.
+    if len(t) == 16 and re.match(r"^\d{1,2}\.\d{1,2}\.\d{2}$", t[15]):
+        v = lambda i: None if t[i] in ("", "N", "NA") else t[i].split("+")[0]
+        # Variant: …_Writer_Editor_Creator_LP_Page_Date (LP one slot later).
+        lp_late = bool(re.match(r"^(LP|PDP)", t[13] or "", re.I))
+        w = 10 if lp_late else 11
+        is_lp = lambda x: bool(x and re.match(r"^(LP|PDP)", x, re.I))
+        lp = v(13) if lp_late else (v(1) if is_lp(v(1)) else None)
+        return {
+            "creative_no": v(0), "product": v(1) if lp_late or not lp else v(2),
+            "landing_page": lp, "script": None if lp_late else v(3),
+            "concept": None, "reason": None, "angle": None, "avatar": None, "type": None,
+            "format": None, "origin": None, "awareness_stage": None,
+            "writer": v(w), "editor": v(w + 1), "creator": v(w + 2) if not lp_late else v(12),
+            "profile": v(14),
+        }
     if t[7].upper() not in type_codes or t[9].upper() not in codes.get("origin", {}):
         return None
     look = lambda sec, v: codes.get(sec, {}).get((v or "").upper(), v or None)
