@@ -828,7 +828,7 @@ def build_attribution(ads_path, daily_path, days):
     """Campaign > ad set > ad tree with per-day numbers for the Attribution tab.
 
     Each ad row: [dayIdx, spend, meta_rev, meta_conv, px_rev, px_orders, imps, clk,
-                  nc_rev, nc_orders, lpv, view, atc, ic]
+                  nc_rev, nc_orders, lpv, view, atc, ic, new_visitors, visitors]
     Meta-reported = Meta 7DC/1DV; px_* = Triple Whale pixel (Triple Attribution +
     Views, 7-day). Funnel counts (lpv..ic) are Meta-reported. Campaigns and ad sets
     are keyed by their Meta IDs when the Meta pull has them, else by name."""
@@ -859,28 +859,37 @@ def build_attribution(ads_path, daily_path, days):
         if r["date"] not in didx:
             continue
         per_ad[r["ad_id"]][didx[r["date"]]] = [num(r[k]) for k in
-            ("spend", "meta_rev", "meta_conv", "px_rev", "px_orders", "imps", "clk", "nc_rev", "nc_orders")]
+            ("spend", "meta_rev", "meta_conv", "px_rev", "px_orders", "imps", "clk", "nc_rev", "nc_orders", "nv", "vis")]
+    tw_ids = {}
+    ip = raw / "tw_ids.csv"
+    if ip.exists():
+        for l in ip.read_text().splitlines()[1:]:
+            v = l.split(";")
+            if len(v) == 3:
+                tw_ids[v[0]] = (v[1], v[2])
     camps, adsets, out_ads = {}, {}, []
-    def camp_idx(key, name, meta):
+    def camp_idx(key, name, meta, cid):
         if key not in camps:
-            camps[key] = [len(camps), key, name, meta.get("status", ""), meta.get("daily_budget"), meta.get("lifetime_budget")]
+            camps[key] = [len(camps), key, name, meta.get("status", ""), meta.get("daily_budget"), meta.get("lifetime_budget"), cid or ""]
         return camps[key][0]
-    def adset_idx(key, name, ci, meta):
+    def adset_idx(key, name, ci, meta, sid):
         if key not in adsets:
-            adsets[key] = [len(adsets), key, name, ci, meta.get("status", ""), meta.get("daily_budget"), meta.get("lifetime_budget")]
+            adsets[key] = [len(adsets), key, name, ci, meta.get("status", ""), meta.get("daily_budget"), meta.get("lifetime_budget"), sid or ""]
         return adsets[key][0]
     for ad_id, days_ in per_ad.items():
         m_ad = st["ads"].get(ad_id, {})
         tw = info.get(ad_id, {})
-        cid, sid = m_ad.get("campaign_id"), m_ad.get("adset_id")
+        tid = tw_ids.get(ad_id, ("", ""))
+        cid = m_ad.get("campaign_id") or (tid[0] if tid[0] not in ("", "0") else "")
+        sid = m_ad.get("adset_id") or (tid[1] if tid[1] not in ("", "0") else "")
         cname = (st["campaigns"].get(cid) or {}).get("name") or m_ad.get("campaign") or tw.get("campaign_name") or "(no campaign)"
         sname = (st["adsets"].get(sid) or {}).get("name") or m_ad.get("adset") or tw.get("adset_name") or "(no ad set)"
-        ci = camp_idx(cid or "n:" + cname, cname, st["campaigns"].get(cid) or {})
-        si = adset_idx(sid or f"n:{ci}:{sname}", sname, ci, st["adsets"].get(sid) or {})
+        ci = camp_idx(cid or "n:" + cname, cname, st["campaigns"].get(cid) or {}, cid)
+        si = adset_idx(sid or f"n:{ci}:{sname}", sname, ci, st["adsets"].get(sid) or {}, sid)
         fz = funnel.get(ad_id, {})
         dd = []
         for k in sorted(days_):
-            row = days_[k] + fz.get(k, [0, 0, 0, 0])
+            row = days_[k][:9] + fz.get(k, [0, 0, 0, 0]) + days_[k][9:]
             if any(row):
                 dd.append([k] + [round(x, 2) if x != int(x) else int(x) for x in row])
         if not dd:
@@ -893,8 +902,11 @@ def build_attribution(ads_path, daily_path, days):
         "adsets": [v[1:] for v in sorted(adsets.values())],
         "ads": out_ads,
         "has_funnel": bool(funnel), "has_budgets": bool(st["campaigns"] or st["adsets"]),
+        "meta_api": True,
+        "tw_label": "Triple Whale pixel, Triple Attribution + Views, 7-day",
+        "note": "Triple Whale pixel revenue before Oct 19 is undercounted (checkout fix).",
         "fields": ["spend", "meta_rev", "meta_conv", "px_rev", "px_orders", "imps", "clk", "nc_rev", "nc_orders",
-                   "lpv", "view", "atc", "ic"],
+                   "lpv", "view", "atc", "ic", "nv", "vis"],
     }
 
 

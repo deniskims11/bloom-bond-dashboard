@@ -25,3 +25,15 @@ export function adsManagerUrl(account, adIds) {
     `selected_ad_ids=${ids[0]}`].filter(Boolean).join("&");
   return `https://adsmanager.facebook.com/adsmanager/manage/ads/edit/standalone?${q}`;
 }
+
+// Campaign / ad set in Ads Manager (edit view: opens archived ones too).
+function levelUrl(level, account, id) {
+  const act = String(account || "").replace(/^act_/, "");
+  if (!id || !act) return null;
+  const biz = AD_ACCOUNT_BUSINESS[act];
+  const q = [`act=${act}`, biz && `business_id=${biz}`, biz && `global_scope_id=${biz}`,
+    `selected_${level}_ids=${id}`].filter(Boolean).join("&");
+  return `https://adsmanager.facebook.com/adsmanager/manage/${level}s/edit/standalone?${q}`;
+}
+export const campaignUrl = (account, id) => levelUrl("campaign", account, id);
+export const adsetUrl = (account, id) => levelUrl("adset", account, id);
