@@ -236,6 +236,15 @@ function PasswordGate({ payload, onOpen }) {
   );
 }
 
+// Opens Meta links in a new tab ourselves: a plain target="_blank" click was being
+// swallowed in some browsers (nothing happened). If the new tab is blocked, open here.
+function openExternal(e, url) {
+  if (!url || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+  e.preventDefault();
+  const w = window.open(url, "_blank");
+  if (w) { try { w.opener = null; } catch {} } else window.location.assign(url);
+}
+
 // Ads Manager link that opens the ad inside its own ad account (and business), so
 // people with several accounts don't land in their personal one.
 const AD_ACCOUNT_BUSINESS = {
@@ -366,7 +375,7 @@ function AdListModal({ open, title, subtitle, ads, onClose, days, range, initial
                       {a.ad_name}</td>
                     <td style={{ ...td, textAlign: "center", width: 72 }}>
                       {a.thumbnail_url && previewUrl ? (
-                        <a href={previewUrl} target="_blank" rel="noopener noreferrer" title={previewTitle} style={{ display: "inline-block", lineHeight: 0 }}>
+                        <a href={previewUrl} target="_blank" rel="noopener noreferrer" onClick={e => openExternal(e, previewUrl)} title={previewTitle} style={{ display: "inline-block", lineHeight: 0 }}>
                           <img src={a.thumbnail_url} alt=""
                             loading="lazy"
                             referrerPolicy="no-referrer"
@@ -384,13 +393,13 @@ function AdListModal({ open, title, subtitle, ads, onClose, days, range, initial
                             style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 4, border: "1px solid #E8DCD0", display: "block" }} />
                         </a>
                       ) : a.preview_link ? (
-                        <a href={a.preview_link} target="_blank" rel="noopener noreferrer"
+                        <a href={a.preview_link} target="_blank" rel="noopener noreferrer" onClick={e => openExternal(e, a.preview_link)}
                           title={previewTitle}
                           style={{ color: "#CC6138", textDecoration: "none", fontSize: 10, fontWeight: 600 }}>
                           Preview ↗
                         </a>
                       ) : managerUrl ? (
-                        <a href={managerUrl} target="_blank" rel="noopener noreferrer"
+                        <a href={managerUrl} target="_blank" rel="noopener noreferrer" onClick={e => openExternal(e, managerUrl)}
                           title={previewTitle}
                           style={{ color: "#b0978f", textDecoration: "none", fontSize: 10, fontWeight: 600 }}>
                           Manager ↗
