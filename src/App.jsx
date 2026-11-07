@@ -1,6 +1,8 @@
 import DailyView, { dailyRows } from "./Daily.jsx";
 import SpendMix from "./SpendMix.jsx";
 import NvpLedger from "./NvpLedger.jsx";
+import Attribution from "./Attribution.jsx";
+import { openExternal, adsManagerUrl } from "./links.js";
 import { useEffect, useMemo, useState } from "react";
 import {
   BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -19,7 +21,7 @@ const fmtPct = (n) => n == null ? "—" : `${Number(n).toFixed(1)}%`;
 const MAX_AN_RULES = 8;
 const DEPTH_BG = ["transparent", "#FBF5F0", "#F5EDE5", "#EFE3D8", "#E9DACD"];
 const depthBg = (d) => DEPTH_BG[Math.min(d, DEPTH_BG.length - 1)];
-const TABS = ["Overview", "Win Rate", "Strategists", "Concepts", "Reasons", "Angles", "Avatars", "Formats", "NVP Buckets", "Breakdowns", "Analysis", "Data Clean Up"];
+const TABS = ["Overview", "Attribution", "Win Rate", "Strategists", "Concepts", "Reasons", "Angles", "Avatars", "Formats", "NVP Buckets", "Breakdowns", "Analysis", "Data Clean Up"];
 const THRESHOLDS = ["$1K", "$5K", "$10K", "$15K", "$25K", "$50K", "$100K", "$150K+"];
 
 // Coloured relative to the account baseline (set from the manifest), so the
@@ -234,32 +236,6 @@ function PasswordGate({ payload, onOpen }) {
       </form>
     </div>
   );
-}
-
-// Opens Meta links in a new tab ourselves: a plain target="_blank" click was being
-// swallowed in some browsers (nothing happened). If the new tab is blocked, open here.
-function openExternal(e, url) {
-  if (!url || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-  e.preventDefault();
-  const w = window.open(url, "_blank");
-  if (w) { try { w.opener = null; } catch {} } else window.location.assign(url);
-}
-
-// Ads Manager link that opens the ad inside its own ad account (and business), so
-// people with several accounts don't land in their personal one.
-const AD_ACCOUNT_BUSINESS = {
-  "2138674693666259": "1041179378721075", // SLD Ad Acc 1 · SLD Ecommerce LLC
-};
-function adsManagerUrl(account, adIds) {
-  const ids = (adIds || []).filter(Boolean);
-  if (!ids.length) return null;
-  const act = String(account || "").replace(/^act_/, "");
-  if (!act) return `https://adsmanager.facebook.com/adsmanager/manage/ads?selected_ad_ids=${ids[0]}`;
-  const biz = AD_ACCOUNT_BUSINESS[act];
-  // The ad's edit view shows its preview and also opens archived/deleted ads.
-  const q = [`act=${act}`, biz && `business_id=${biz}`, biz && `global_scope_id=${biz}`,
-    `selected_ad_ids=${ids[0]}`].filter(Boolean).join("&");
-  return `https://adsmanager.facebook.com/adsmanager/manage/ads/edit/standalone?${q}`;
 }
 
 // --------- Ad list modal (shown when a bucket row is clicked) ---------
@@ -1306,6 +1282,10 @@ export default function Dashboard() {
               </ResponsiveContainer>
             </div>
           </div>
+        )}
+
+        {tab === "Attribution" && (
+          <Attribution attr={manifest.attr} days={manifest.days || []} start={isoOf(dateStart)} end={isoOf(dateEnd)} />
         )}
 
         {tab === "Win Rate" && (

@@ -37,6 +37,11 @@ PURCHASE = ("omni_purchase", "offsite_conversion.fb_pixel_purchase", "purchase")
 ALL_STATUSES = ["ACTIVE", "PAUSED", "DELETED", "PENDING_REVIEW", "DISAPPROVED", "PREAPPROVED",
                 "PENDING_BILLING_INFO", "CAMPAIGN_PAUSED", "ARCHIVED", "ADSET_PAUSED", "IN_PROCESS",
                 "WITH_ISSUES"]
+# Funnel steps for the Attribution tab (Meta-reported, same attribution as purchases).
+LPV = ("landing_page_view", "omni_landing_page_view")
+VIEW = ("omni_view_content", "offsite_conversion.fb_pixel_view_content", "view_content")
+ATC = ("omni_add_to_cart", "offsite_conversion.fb_pixel_add_to_cart", "add_to_cart")
+IC = ("omni_initiated_checkout", "offsite_conversion.fb_pixel_initiate_checkout", "initiate_checkout")
 RETRY_CODES = {1, 2, 4, 17, 32, 613, 80000, 80004}
 
 
@@ -133,6 +138,11 @@ def fmt(v):
     return str(int(v)) if v == int(v) else str(v)
 
 
+def cents(v):
+    """Meta budgets come in the account currency's minor unit (cents)."""
+    return round(int(v) / 100, 2) if v not in (None, "", "0") else None
+
+
 def clean(v):
     return str(v or "").replace("\t", " ").replace("\n", " ").replace(";", ",")
 
@@ -143,7 +153,7 @@ def main():
     a = ap.parse_args()
     out = pathlib.Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    files = [out / "meta_daily.csv", out / "meta_ads.tsv"]
+    files = [out / "meta_daily.csv", out / "meta_ads.tsv", out / "meta_structure.json"]
     token = os.environ.get("META_ACCESS_TOKEN")
     if not token:
         print("META_ACCESS_TOKEN not set: Meta-direct metrics skipped, Triple Whale used for everything")
@@ -158,7 +168,7 @@ def main():
         for act, label in ACCOUNTS.items():
             n0 = len(ads)
             for r in pages(f"{act}/ads", token, {
-                    "fields": "id,name,created_time,effective_status,adset{name},campaign{name},"
+                    "fields": "id,name,created_time,effective_status,adset{id,name},campaign{id,name},"
                               "creative{object_story_spec,asset_feed_spec,link_url,object_url}",
                     "filtering": json.dumps([{"field": "effective_status", "operator": "IN", "value": ALL_STATUSES}]),
                     "limit": 200}):
@@ -166,6 +176,7 @@ def main():
                     "name": r.get("name", ""), "adset": (r.get("adset") or {}).get("name", ""),
                     "campaign": (r.get("campaign") or {}).get("name", ""), "account": act.split("_")[1],
                     "created": (r.get("created_time") or "")[:10], "status": r.get("effective_status", ""),
+                    "adset_id": (r.get("adset") or {}).get("id", ""), "campaign_id": (r.get("campaign") or {}).get("id", ""),
                     "url": dest_url(r.get("creative")),
                 }
             print(f"  {label}: {len(ads) - n0} ads")
@@ -184,7 +195,9 @@ def main():
                                   act_val(r.get("action_values"), PURCHASE), act_val(r.get("actions"), PURCHASE),
                                   float(r.get("impressions") or 0), act_val(r.get("outbound_clicks"), ("outbound_click",)),
                                   float(r.get("inline_link_clicks") or 0), act_val(r.get("actions"), ("video_view",)),
-                                  act_val(r.get("video_thruplay_watched_actions"), ("video_view",))])
+                                  act_val(r.get("video_thruplay_watched_actions"), ("video_view",)),
+                                  act_val(r.get("actions"), LPV), act_val(r.get("actions"), VIEW),
+                                  act_val(r.get("actions"), ATC), act_val(r.get("actions"), IC)])
                 print(f"  {label} {d} → {ce}: {len(rows)} ad-days")
                 d = ce + timedelta(days=1)
     except (MetaError, KeyError) as e:
@@ -199,7 +212,7 @@ def main():
         return
 
     with open(out / "meta_daily.csv", "w") as fh:
-        fh.write("ad_id;date;spend;meta_rev;meta_conv;imps;clk;link_clk;v3s;thru\n")
+        fh.write("ad_id;date;spend;meta_rev;meta_conv;imps;clk;link_clk;v3s;thru;lpv;view;atc;ic\n")
         for r in sorted(daily, key=lambda r: (r[0], r[1])):
             fh.write(";".join([r[0], r[1]] + [fmt(x) for x in r[2:]]) + "\n")
     with open(out / "meta_ads.tsv", "w") as fh:
@@ -207,6 +220,28 @@ def main():
         fh.write("\t".join(cols) + "\n")
         for i, x in ads.items():
             fh.write("\t".join([i] + [clean(x[c]) for c in cols[1:]]) + "\n")
+    # Campaign / ad set budgets and on-off status for the Attribution tab (read-only;
+    # a failure here only drops budgets, never the rest of the Meta pull).
+    camps, adsets = {}, {}
+    try:
+        for act in ACCOUNTS:
+            for r in pages(f"{act}/campaigns", token, {
+                    "fields": "id,name,effective_status,daily_budget,lifetime_budget", "limit": 200}):
+                camps[r["id"]] = {"name": r.get("name", ""), "status": r.get("effective_status", ""),
+                                  "daily_budget": cents(r.get("daily_budget")), "lifetime_budget": cents(r.get("lifetime_budget"))}
+            for r in pages(f"{act}/adsets", token, {
+                    "fields": "id,name,campaign_id,effective_status,daily_budget,lifetime_budget", "limit": 200}):
+                adsets[r["id"]] = {"name": r.get("name", ""), "campaign_id": r.get("campaign_id", ""),
+                                   "status": r.get("effective_status", ""),
+                                   "daily_budget": cents(r.get("daily_budget")), "lifetime_budget": cents(r.get("lifetime_budget"))}
+        print(f"  structure: {len(camps)} campaigns · {len(adsets)} ad sets")
+    except (MetaError, KeyError) as e:
+        print(f"WARNING Meta budgets skipped ({e})")
+    (out / "meta_structure.json").write_text(json.dumps({
+        "campaigns": camps, "adsets": adsets,
+        "ads": {i: {"adset_id": x["adset_id"], "campaign_id": x["campaign_id"], "status": x["status"],
+                    "adset": x["adset"], "campaign": x["campaign"], "name": x["name"], "account": x["account"]}
+                for i, x in ads.items()}}, separators=(",", ":")))
     # Same shape as the old Ads Manager export (scripts/meta_created.py): published
     # ads only; a deleted ad counts only if it delivered.
     mc = [{"n": x["name"].strip(), "a": "act_" + x["account"], "c": x["created"], "s": round(lifetime.get(i, 0.0), 2)}

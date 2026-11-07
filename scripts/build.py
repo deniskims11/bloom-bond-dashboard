@@ -796,6 +796,78 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
                      "mapped_ads": sum(1 for a in ads if a["convention"] == "mapped")},
     }
 
+def build_attribution(ads_path, daily_path, days):
+    """Campaign > ad set > ad tree with per-day numbers for the Attribution tab.
+
+    Each ad row: [dayIdx, spend, meta_rev, meta_conv, px_rev, px_orders, imps, clk,
+                  nc_rev, nc_orders, lpv, view, atc, ic]
+    Meta-reported = Meta 7DC/1DV; px_* = Triple Whale pixel (Triple Attribution +
+    Views, 7-day). Funnel counts (lpv..ic) are Meta-reported. Campaigns and ad sets
+    are keyed by their Meta IDs when the Meta pull has them, else by name."""
+    if not daily_path or not pathlib.Path(daily_path).exists():
+        return None
+    raw = pathlib.Path(ads_path).parent
+    st_path = raw / "meta_structure.json"
+    st = json.loads(st_path.read_text()) if st_path.exists() else {"campaigns": {}, "adsets": {}, "ads": {}}
+    didx = {d: i for i, d in enumerate(days)}
+    info = {r["ad_id"]: r for r in csv.DictReader(open(ads_path, encoding="utf-8"), delimiter="\t")}
+    funnel = defaultdict(dict)
+    md = raw / "meta_daily.csv"
+    if md.exists():
+        lines = md.read_text().splitlines()
+        cols = lines[0].split(";")
+        if "atc" in cols:
+            for l in lines[1:]:
+                r = dict(zip(cols, l.split(";")))
+                if r["date"] in didx:
+                    funnel[r["ad_id"]][didx[r["date"]]] = [num(r[k]) for k in ("lpv", "view", "atc", "ic")]
+    per_ad = defaultdict(dict)
+    lines = pathlib.Path(daily_path).read_text().splitlines()
+    cols = lines[0].split(";")
+    for l in lines[1:]:
+        if not l.strip():
+            continue
+        r = dict(zip(cols, l.split(";")))
+        if r["date"] not in didx:
+            continue
+        per_ad[r["ad_id"]][didx[r["date"]]] = [num(r[k]) for k in
+            ("spend", "meta_rev", "meta_conv", "px_rev", "px_orders", "imps", "clk", "nc_rev", "nc_orders")]
+    camps, adsets, out_ads = {}, {}, []
+    def camp_idx(key, name, meta):
+        if key not in camps:
+            camps[key] = [len(camps), key, name, meta.get("status", ""), meta.get("daily_budget"), meta.get("lifetime_budget")]
+        return camps[key][0]
+    def adset_idx(key, name, ci, meta):
+        if key not in adsets:
+            adsets[key] = [len(adsets), key, name, ci, meta.get("status", ""), meta.get("daily_budget"), meta.get("lifetime_budget")]
+        return adsets[key][0]
+    for ad_id, days_ in per_ad.items():
+        m_ad = st["ads"].get(ad_id, {})
+        tw = info.get(ad_id, {})
+        cid, sid = m_ad.get("campaign_id"), m_ad.get("adset_id")
+        cname = (st["campaigns"].get(cid) or {}).get("name") or m_ad.get("campaign") or tw.get("campaign_name") or "(no campaign)"
+        sname = (st["adsets"].get(sid) or {}).get("name") or m_ad.get("adset") or tw.get("adset_name") or "(no ad set)"
+        ci = camp_idx(cid or "n:" + cname, cname, st["campaigns"].get(cid) or {})
+        si = adset_idx(sid or f"n:{ci}:{sname}", sname, ci, st["adsets"].get(sid) or {})
+        fz = funnel.get(ad_id, {})
+        dd = []
+        for k in sorted(days_):
+            row = days_[k] + fz.get(k, [0, 0, 0, 0])
+            if any(row):
+                dd.append([k] + [round(x, 2) if x != int(x) else int(x) for x in row])
+        if not dd:
+            continue
+        acct = (m_ad.get("account") or tw.get("account_id") or "").replace("act_", "")
+        out_ads.append([ad_id, m_ad.get("name") or tw.get("ad_name") or ad_id, si, m_ad.get("status", ""), acct, dd])
+    return {
+        "campaigns": [v[1:] for v in sorted(camps.values())],
+        "adsets": [v[1:] for v in sorted(adsets.values())],
+        "ads": out_ads,
+        "has_funnel": bool(funnel), "has_budgets": bool(st["campaigns"] or st["adsets"]),
+        "fields": ["spend", "meta_rev", "meta_conv", "px_rev", "px_orders", "imps", "clk", "nc_rev", "nc_orders",
+                   "lpv", "view", "atc", "ic"],
+    }
+
 
 def main():
     a = sys.argv[1:]
@@ -803,6 +875,7 @@ def main():
         sys.exit("usage: build.py <ads.tsv> <weekly.csv> <start YYYY-MM-DD> <end YYYY-MM-DD> [daily.csv]")
     m = build(a[0], a[1], ROOT / "data" / "definitions.csv", ROOT / "data" / "legacy_map.json", a[2], a[3],
               a[4] if len(a) > 4 else None, a[5] if len(a) > 5 else None)
+    m["attr"] = build_attribution(a[0], a[4] if len(a) > 4 else None, m["days"])
     out = ROOT / "public" / "data"
     (out / "history").mkdir(parents=True, exist_ok=True)
     (out / "latest.json").write_text(json.dumps(m, separators=(",", ":"), default=str))
