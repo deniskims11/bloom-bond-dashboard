@@ -67,6 +67,10 @@ def call(path, token, params=None, method="GET", tries=6):
                 err = json.loads(body).get("error", {})
             except ValueError:
                 err = {}
+            too_big = "reduce the amount of data" in (err.get("message") or "")
+            if too_big:
+                # Retrying the same request can't help; pages() asks for smaller pages.
+                raise MetaError(f"TOO_BIG HTTP {e.code}: {err.get('message')}")
             if (err.get("code") in RETRY_CODES or e.code >= 500) and attempt < tries - 1:
                 time.sleep(30 * (attempt + 1))
                 continue
@@ -80,15 +84,27 @@ def call(path, token, params=None, method="GET", tries=6):
 
 
 def pages(path, token, params):
-    out = call(path, token, params)
+    """All pages of a list call. When Meta says a page is too much data, the same
+    page is asked for again at half the size (down to 10 rows)."""
+    def fetch(url_or_path, p):
+        limit = int(p.get("limit") or 200)
+        while True:
+            try:
+                return call(url_or_path, token, dict(p, limit=limit))
+            except MetaError as e:
+                if not str(e).startswith("TOO_BIG") or limit <= 10:
+                    raise
+                limit = max(10, limit // 2)
+                print(f"    Meta: page too large, retrying with {limit} rows")
+    out = fetch(path, params)
     while True:
         yield from out.get("data", [])
         nxt = (out.get("paging") or {}).get("next")
         if not nxt:
             return
         u = parse.urlsplit(nxt)
-        q = [(k, v) for k, v in parse.parse_qsl(u.query, keep_blank_values=True) if k != "access_token"]
-        out = call(parse.urlunsplit((u.scheme, u.netloc, u.path, parse.urlencode(q), "")), token)
+        q = dict((k, v) for k, v in parse.parse_qsl(u.query, keep_blank_values=True) if k != "access_token")
+        out = fetch(parse.urlunsplit((u.scheme, u.netloc, u.path, "", "")), q)
 
 
 def report(act, token, params):
