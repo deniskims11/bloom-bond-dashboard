@@ -18,6 +18,10 @@ const fmt = (n) => n == null ? "—" : n >= 1000000 ? `$${(n/1000000).toFixed(1)
 const fmtFull = (n) => `$${Math.round(n).toLocaleString()}`;
 const fmtNum = (n) => n == null ? "—" : Number(n).toLocaleString();
 const fmtPct = (n) => n == null ? "—" : `${Number(n).toFixed(1)}%`;
+const fmtPct2 = (n) => n == null ? "—" : `${Number(n).toFixed(2)}%`;
+const fmtUsd2 = (n) => n == null ? "—" : `$${Number(n).toFixed(2)}`;
+const fmtUsd0 = (n) => n == null ? "—" : `$${Number(n).toFixed(0)}`;
+const cvrOf = (a) => a.metrics.clicks ? (a.metrics.txns / a.metrics.clicks) * 100 : null;
 
 const MAX_AN_RULES = 8;
 const DEPTH_BG = ["transparent", "#FBF5F0", "#F5EDE5", "#EFE3D8", "#E9DACD"];
@@ -256,6 +260,7 @@ function AdListModal({ open, title, subtitle, ads, onClose, days, range, initial
              : sort.col === "nc_txns" ? a.metrics.nc_txns
              : sort.col === "clicks" ? a.metrics.clicks
              : sort.col === "ad_name" ? a.ad_name
+             : sort.col === "cvr" ? cvrOf(a)
              : a.metrics[sort.col];
       let vb = sort.col === "spend" ? b.metrics.spend
              : sort.col === "rev" ? b.metrics.rev
@@ -329,10 +334,14 @@ function AdListModal({ open, title, subtitle, ads, onClose, days, range, initial
                 <SortHeader label="Ad Name" col="ad_name" sort={sort} setSort={setSort} align="left" />
                 <th style={{ ...th, textAlign: "center" }}>Preview</th>
                 <SortHeader label="Spend" col="spend" sort={sort} setSort={setSort} />
-                <SortHeader label="Revenue" col="rev" sort={sort} setSort={setSort} />
                 <SortHeader label="ROAS" col="roas" sort={sort} setSort={setSort} />
+                {HAS_NC && <SortHeader label="NCROAS" col="ncroas" sort={sort} setSort={setSort} />}
+                {HAS_NC && <SortHeader label="NC CPA" col="nccpa" sort={sort} setSort={setSort} />}
                 <SortHeader label="% New Visitors" col="pct_new_visitors" sort={sort} setSort={setSort} />
-                <SortHeader label="Outbound clicks" col="clicks" sort={sort} setSort={setSort} />
+                <SortHeader label="CPC (out)" col="cpc" sort={sort} setSort={setSort} />
+                <SortHeader label="CTR" col="ctr" sort={sort} setSort={setSort} />
+                <SortHeader label="CPM" col="cpm" sort={sort} setSort={setSort} />
+                <SortHeader label="CVR" col="cvr" sort={sort} setSort={setSort} />
                 <SortHeader label="Txns" col="txns" sort={sort} setSort={setSort} />
               </tr>
             </thead>
@@ -387,10 +396,14 @@ function AdListModal({ open, title, subtitle, ads, onClose, days, range, initial
                       ) : <span style={{ color: "#D8C8BC", fontSize: 10 }}>—</span>}
                     </td>
                     <td style={{ ...td, textAlign: "right" }}>{fmt(a.metrics.spend)}</td>
-                    <td style={{ ...td, textAlign: "right" }}>{fmt(a.metrics.rev)}</td>
                     <td style={{ ...td, textAlign: "right" }}><RoasBadge roas={a.metrics.roas} /></td>
+                    {HAS_NC && <td style={{ ...td, textAlign: "right" }}><RoasBadge roas={a.metrics.ncroas} base="ncroas" /></td>}
+                    {HAS_NC && <td style={{ ...td, textAlign: "right" }}>{fmtUsd0(a.metrics.nccpa)}</td>}
                     <td style={{ ...td, textAlign: "right" }}>{fmtPct(pctNew)}</td>
-                    <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtNum(a.metrics.clicks)}</td>
+                    <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtUsd2(a.metrics.cpc)}</td>
+                    <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtPct2(a.metrics.ctr)}</td>
+                    <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{a.metrics.cpm ? `$${a.metrics.cpm.toFixed(1)}` : "—"}</td>
+                    <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtPct2(cvrOf(a))}</td>
                     <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtNum(a.metrics.txns)}</td>
                   </tr>
                 );
@@ -458,16 +471,16 @@ function BreakdownTable({ rows, nameLabel = "Name", onRowClick, dim }) {
     { key: "name", label: nameLabel, align: "left" },
     { key: "creatives", label: "Ads" },
     { key: "spend", label: "Spend" },
-    { key: "revenue", label: "Revenue" },
     { key: "roas", label: LBL.roas },
-    ...(HAS_NC ? [{ key: "ncroas", label: "NCROAS" }, { key: "pct_new", label: "% New Cust." }] : []),
+    ...(HAS_NC ? [{ key: "ncroas", label: "NCROAS" }, { key: "nccpa", label: "NC CPA" }, { key: "pct_new", label: "% New Cust." }] : []),
     ...(HAS_NV ? [{ key: "pct_new_visitors", label: "% New Visitors" }] : []),
     { key: "purchases", label: "Orders" },
-    { key: "ctr", label: "CTR (out)" },
-    { key: "cvr", label: "CVR" },
     { key: "aov", label: "AOV" },
     { key: "cpa", label: "CPA (Meta)" },
-    ...(HAS_NC ? [{ key: "nccpa", label: "NC CPA" }] : []),
+    { key: "cpc", label: "CPC (out)" },
+    { key: "ctr", label: "CTR (out)" },
+    { key: "cpm", label: "CPM" },
+    { key: "cvr", label: "CVR" },
     { key: "winRate1k", label: "WR $1K" },
     { key: "winRate10k", label: "WR $10K" },
     { key: "winRate15k", label: "WR $15K" },
@@ -491,17 +504,18 @@ function BreakdownTable({ rows, nameLabel = "Name", onRowClick, dim }) {
             <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtNum(r.creatives)}</td>
             {(() => { const p = cmpRow(dim, r.name); r._p = p && (p._none ? "new" : p); return null; })()}
             <td style={{ ...td, textAlign: "right", fontWeight: 500 }}>{fmt(r.spend)}<Delta cur={r.spend} prev={r._p === "new" ? "new" : r._p?.spend} /></td>
-            <td style={{ ...td, textAlign: "right" }}>{fmt(r.revenue)}<Delta cur={r.revenue} prev={r._p === "new" ? "new" : r._p?.revenue} /></td>
             <td style={{ ...td, textAlign: "right" }}><RoasBadge roas={r.roas} /><Delta cur={r.roas} prev={r._p === "new" ? "new" : r._p?.roas} /></td>
             {HAS_NC && <td style={{ ...td, textAlign: "right" }}><RoasBadge roas={r.ncroas} base="ncroas" /><Delta cur={r.ncroas} prev={r._p === "new" ? "new" : r._p?.ncroas} /></td>}
+            {HAS_NC && <td style={{ ...td, textAlign: "right" }}>{r.nccpa ? `$${r.nccpa.toFixed(0)}` : "—"}<Delta cur={r.nccpa} prev={r._p === "new" ? "new" : r._p?.nccpa} inverse /></td>}
             {HAS_NC && <td style={{ ...td, textAlign: "right" }}>{fmtPct(r.pct_new)}</td>}
             {HAS_NV && <td style={{ ...td, textAlign: "right" }}>{fmtPct(r.pct_new_visitors)}</td>}
             <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtNum(r.purchases)}</td>
-            <td style={{ ...td, textAlign: "right" }}>{r.ctr == null ? "—" : `${r.ctr.toFixed(2)}%`}</td>
-            <td style={{ ...td, textAlign: "right" }}>{r.cvr == null ? "—" : `${r.cvr.toFixed(2)}%`}<Delta cur={r.cvr} prev={r._p === "new" ? "new" : r._p?.cvr} /></td>
             <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{r.aov ? `$${r.aov.toFixed(0)}` : "—"}</td>
             <td style={{ ...td, textAlign: "right", fontWeight: 600 }}>{r.cpa ? `$${r.cpa.toFixed(0)}` : "—"}<Delta cur={r.cpa} prev={r._p === "new" ? "new" : r._p?.cpa} inverse /></td>
-            {HAS_NC && <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{r.nccpa ? `$${r.nccpa.toFixed(0)}` : "—"}<Delta cur={r.nccpa} prev={r._p === "new" ? "new" : r._p?.nccpa} inverse /></td>}
+            <td style={{ ...td, textAlign: "right" }}>{r.cpc == null ? "—" : `$${r.cpc.toFixed(2)}`}<Delta cur={r.cpc} prev={r._p === "new" ? "new" : r._p?.cpc} inverse /></td>
+            <td style={{ ...td, textAlign: "right" }}>{r.ctr == null ? "—" : `${r.ctr.toFixed(2)}%`}<Delta cur={r.ctr} prev={r._p === "new" ? "new" : r._p?.ctr} /></td>
+            <td style={{ ...td, textAlign: "right" }}>{r.cpm ? `$${r.cpm.toFixed(1)}` : "—"}<Delta cur={r.cpm} prev={r._p === "new" ? "new" : r._p?.cpm} inverse /></td>
+            <td style={{ ...td, textAlign: "right" }}>{r.cvr == null ? "—" : `${r.cvr.toFixed(2)}%`}<Delta cur={r.cvr} prev={r._p === "new" ? "new" : r._p?.cvr} /></td>
             {[r.winRate1k, r.winRate10k, r.winRate15k, r.winRate50k, ...(HAS_NC ? [r.effRate] : [])].map((v, j) => (
               <td key={j} title={`${r.eligible ?? "?"} launches eligible`} style={{ ...td, textAlign: "right", color: (r.eligible ?? 99) < 5 ? "#cbb8b0" : td.color }}>
                 {(r.eligible ?? 1) === 0 ? "—" : fmtPct(v)}
@@ -2120,13 +2134,16 @@ function TreeTable({ nodes, dimLabels, onLeafClick, onDaily, tendency, prevMap, 
         <td style={td} />
         <td style={{ ...td, textAlign: "right", color: "#b0978f" }}>—</td>
         <td style={{ ...td, textAlign: "right" }}>{fmt(d.spend)}</td>
-        <td style={{ ...td, textAlign: "right" }}>{fmt(d.rev)}</td>
         <td style={{ ...td, textAlign: "right" }}>{d.roas == null ? "—" : `${d.roas.toFixed(2)}x`}</td>
         {HAS_NC && <td style={{ ...td, textAlign: "right" }}>{d.ncroas == null ? "—" : `${d.ncroas.toFixed(2)}x`}</td>}
-        <td style={{ ...td, textAlign: "right", color: "#b0978f" }}>—</td>
+        {HAS_NC && <td style={{ ...td, textAlign: "right" }}>{d.nc_orders ? fmtUsd0(d.spend / d.nc_orders) : "—"}</td>}
+        <td style={{ ...td, textAlign: "right" }}>{fmtPct(d.nvp)}</td>
         <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtNum(d.orders)}</td>
         <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{d.aov ? `$${d.aov.toFixed(0)}` : "—"}</td>
+        <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtUsd2(d.cpc)}</td>
+        <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtPct2(d.ctr)}</td>
         <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{d.cpm ? `$${d.cpm.toFixed(1)}` : "—"}</td>
+        <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtPct2(d.cvr)}</td>
       </tr>
     );
   };
@@ -2139,13 +2156,16 @@ function TreeTable({ nodes, dimLabels, onLeafClick, onDaily, tendency, prevMap, 
           <th style={{ ...th, textAlign: "center", cursor: "default" }} title="Top-spending ad in the row; click to watch">Preview</th>
           {sortHeader("Ads", "count")}
           {sortHeader("Spend", "spend")}
-          {sortHeader("Revenue", "rev")}
           {sortHeader("ROAS", "roas")}
           {HAS_NC && sortHeader("NCROAS", "ncroas")}
+          {HAS_NC && sortHeader("NC CPA", "nccpa")}
           {sortHeader("% New Visitors", "pct_new_visitors")}
           {sortHeader("Purchases", "txns")}
           {sortHeader("AOV", "aov")}
+          {sortHeader("CPC (out)", "cpc")}
+          {sortHeader("CTR", "ctr")}
           {sortHeader("CPM", "cpm")}
+          {sortHeader("CVR", "cvr")}
         </tr>
       </thead>
       <tbody>
@@ -2165,13 +2185,16 @@ function TreeTable({ nodes, dimLabels, onLeafClick, onDaily, tendency, prevMap, 
             {previewCell(r.n)}
             <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtNum(r.n.agg.count)}</td>
             <td style={{ ...td, textAlign: "right", fontWeight: 500 }}>{fmt(r.n.agg.spend)}{delta(r.path, "spend", r.n.agg.spend)}</td>
-            <td style={{ ...td, textAlign: "right" }}>{fmt(r.n.agg.rev)}{delta(r.path, "rev", r.n.agg.rev)}</td>
             <td style={{ ...td, textAlign: "right" }}><RoasBadge roas={r.n.agg.roas} />{delta(r.path, "roas", r.n.agg.roas)}</td>
             {HAS_NC && <td style={{ ...td, textAlign: "right" }}><RoasBadge roas={r.n.agg.ncroas} base="ncroas" />{delta(r.path, "ncroas", r.n.agg.ncroas)}</td>}
+            {HAS_NC && <td style={{ ...td, textAlign: "right" }}>{fmtUsd0(r.n.agg.nccpa)}{delta(r.path, "nccpa", r.n.agg.nccpa, true)}</td>}
             <td style={{ ...td, textAlign: "right" }}>{fmtPct(r.n.agg.pct_new_visitors)}</td>
             <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtNum(r.n.agg.txns)}</td>
             <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{r.n.agg.aov ? `$${r.n.agg.aov.toFixed(0)}` : "—"}</td>
+            <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtUsd2(r.n.agg.cpc)}{delta(r.path, "cpc", r.n.agg.cpc, true)}</td>
+            <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtPct2(r.n.agg.ctr)}{delta(r.path, "ctr", r.n.agg.ctr)}</td>
             <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{r.n.agg.cpm ? `$${r.n.agg.cpm.toFixed(1)}` : "—"}{delta(r.path, "cpm", r.n.agg.cpm, true)}</td>
+            <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtPct2(r.n.agg.cvr)}{delta(r.path, "cvr", r.n.agg.cvr)}</td>
           </tr>
         ))}
       </tbody>

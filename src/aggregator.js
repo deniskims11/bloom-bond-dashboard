@@ -76,6 +76,7 @@ export function aggregate(ads) {
     cpm: tot.impressions ? (tot.spend / tot.impressions) * 1000 : 0,
     cpc: tot.clicks ? tot.spend / tot.clicks : null,
     ctr: tot.impressions ? (tot.clicks / tot.impressions) * 100 : null,
+    cvr: tot.clicks ? (tot.txns / tot.clicks) * 100 : null,
     cpa: tot.txns ? tot.spend / tot.txns : null,
     aov: tot.txns ? tot.rev / tot.txns : null,
     // Share of pixel-attributed purchases that came from new customers.
