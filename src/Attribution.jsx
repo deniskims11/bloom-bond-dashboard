@@ -1,4 +1,5 @@
 import { Fragment, useMemo, useState } from "react";
+import { NC } from "./aggregator.js";
 import { ComposedChart, BarChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, LabelList } from "recharts";
 import { openExternal, adsManagerUrl, campaignUrl, adsetUrl } from "./links.js";
 import AdPreview, { PlayBadge, playable } from "./AdPreview.jsx";
@@ -26,9 +27,10 @@ const pct = v => (v == null ? "—" : `${v.toFixed(2)}%`);
 const int = v => (v == null ? "—" : Math.round(v).toLocaleString());
 const shortDay = iso => { const d = new Date(iso + "T00:00:00Z"); return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }); };
 
-const N = 15; // metric slots per dd row (after dayIdx)
+// 15 metric slots per dd row (after dayIdx) + slot 15 = spend on days with new-customer data.
+const N = 16;
 const zero = () => new Array(N).fill(0);
-const add = (t, r) => { for (let j = 0; j < N; j++) t[j] += r[j + 1] || 0; };
+const add = (t, r) => { for (let j = 0; j < 15; j++) t[j] += r[j + 1] || 0; if (r[0] >= NC.start) t[15] += r[1] || 0; };
 
 // Table column layout (order + hidden), remembered per browser.
 const COL_STORE = "bb_attr_cols_v1";
@@ -48,7 +50,7 @@ function kpis(v) {
     cpm: imps ? (spend / imps) * 1000 : null, cvr: clk ? (mord / clk) * 100 : null,
     maov: mord ? mrev / mord : null, paov: pord ? prev / pord : null,
     ncrev: v[7], ncord: v[8],
-    ncroas: spend ? v[7] / spend : null, nccpa: v[8] ? spend / v[8] : null,
+    ncroas: v[15] ? v[7] / v[15] : null, nccpa: v[8] ? v[15] / v[8] : null,
   };
 }
 

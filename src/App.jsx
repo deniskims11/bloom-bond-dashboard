@@ -11,7 +11,7 @@ import {
 } from "recharts";
 import {
   aggregate, groupBy, monthly, winRate, toBreakdownRows, weekly, weeklyFromDaily,
-  DIMENSIONS, dimensionValues, BASELINE, setBaseline, testingScaling, TS_BUCKETS,
+  DIMENSIONS, dimensionValues, BASELINE, setBaseline, testingScaling, TS_BUCKETS, NC, setNcStart,
 } from "./aggregator.js";
 
 const fmt = (n) => n == null ? "—" : n >= 1000000 ? `$${(n/1000000).toFixed(1)}M` : n >= 1000 ? `$${(n/1000).toFixed(0)}K` : `$${n.toFixed(0)}`;
@@ -138,14 +138,16 @@ function periodAds(ads, days, startYy, endYy) {
       hasPx = hasPx || r.length > 10;
     }
     const [spend, rev, txns, nc_rev, nc_txns, nv, vis, imps, clicks] = t;
+    let nc_spend = 0; // spend on days with new-customer data (NC ratios)
+    for (const r of a.dd || []) if (r[0] >= lo && r[0] <= hi && r[0] >= NC.start) nc_spend += r[1];
     const pxRev = hasPx ? t[9] : rev, pxTxns = hasPx ? t[10] : txns;
     if (spend <= 0 && rev <= 0) continue;
     const m = {
-      ...a.metrics, spend, rev, txns, meta_rev: hasPx ? rev : a.metrics.meta_rev, meta_txns: hasPx ? txns : a.metrics.meta_txns,
+      ...a.metrics, spend, nc_spend, rev, txns, meta_rev: hasPx ? rev : a.metrics.meta_rev, meta_txns: hasPx ? txns : a.metrics.meta_txns,
       pixel_rev: pxRev, pixel_txns: pxTxns, nc_rev, nc_txns,
       new_visitors: nv, visitors: vis, impressions: imps, clicks,
-      roas: spend ? rev / spend : 0, pixel_roas: spend ? pxRev / spend : 0,
-      ncroas: spend ? nc_rev / spend : null, nccpa: nc_txns ? spend / nc_txns : null,
+      roas: spend ? rev / spend : 0, pixel_roas: nc_spend ? pxRev / nc_spend : null,
+      ncroas: nc_spend ? nc_rev / nc_spend : null, nccpa: nc_txns ? nc_spend / nc_txns : null,
       pct_new: pxTxns ? (nc_txns / pxTxns) * 100 : null, pct_new_visitors: vis ? (nv / vis) * 100 : null,
       aov: txns ? rev / txns : null, cpa: txns ? spend / txns : null,
       cpm: imps ? (spend / imps) * 1000 : 0, cpc: clicks ? spend / clicks : null,
@@ -684,7 +686,7 @@ export default function Dashboard() {
       const m = a.metrics; const nc = m.nc_rev_adj ?? m.nc_rev, nco = m.nc_txns_adj ?? m.nc_txns;
       return { ...a,
         // The reallocated new-customer orders are real orders, so they join the pixel totals too.
-        metrics: { ...m, nc_rev: nc, nc_txns: nco, ncroas: m.spend ? nc / m.spend : null, nccpa: nco ? m.spend / nco : null,
+        metrics: { ...m, nc_rev: nc, nc_txns: nco, ncroas: (m.nc_spend ?? m.spend) ? nc / (m.nc_spend ?? m.spend) : null, nccpa: nco ? (m.nc_spend ?? m.spend) / nco : null,
           pixel_rev: (m.pixel_rev || 0) + (nc - (m.nc_rev || 0)), pixel_txns: (m.pixel_txns || 0) + (nco - (m.nc_txns || 0)),
           pct_new: ((m.pixel_txns || 0) + (nco - (m.nc_txns || 0))) ? (nco / ((m.pixel_txns || 0) + (nco - (m.nc_txns || 0)))) * 100 : null },
         dd: (a.dd || []).map(r => (r.length > 13
@@ -737,6 +739,7 @@ export default function Dashboard() {
   const ads = useMemo(() => {
     // Baseline must be in place before any memo below derives badges / efficient wins.
     setBaseline(lensBaseline);
+    if (manifest) setNcStart(manifest.days, manifest.nc_start);
     setLabels(manifest);
     let raw = lensAds;
     if ((dateStart || dateEnd) && canActivity && dateMode === "activity") {
@@ -1059,6 +1062,7 @@ export default function Dashboard() {
 
   HAS_NC = manifest.has_nc !== false;
   setBaseline(lensBaseline);
+  if (manifest) setNcStart(manifest.days, manifest.nc_start);
   CMP.on = !!cmp && cmp.ads.length > 0; CMP.ads = cmp?.ads || []; CMP.label = cmp?.label || ""; CMP.cache = {};
   if (lensOn) LBL.nc_sub = "Corrected: pre-Oct 19 pixel NC scaled to Meta-reported";
   HAS_NV = (manifest.ads || []).some(a => a.metrics && a.metrics.visitors);

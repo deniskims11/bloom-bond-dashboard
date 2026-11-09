@@ -44,12 +44,22 @@ function yymmddToMonth(s) {
   return `20${s.slice(0, 2)}-${s.slice(2, 4)}`;
 }
 
+// New-customer data starts at this day index (Bloom & Bond: Triple Whale per-ad NC data
+// from Sep 5 while spend goes back further). NC ratios divide by spend from here on.
+export const NC = { start: 0 };
+export function setNcStart(days, iso) {
+  const i = iso && days ? days.findIndex((d) => d >= iso) : 0;
+  NC.start = i < 0 ? (days ? days.length : 0) : i;
+}
+const ncSpendOf = (m) => (m.nc_spend ?? m.spend ?? 0);
+
 // Aggregate a filtered list of ad records into summary metrics.
 export function aggregate(ads) {
   const tot = ads.reduce(
     (a, r) => {
       const m = r.metrics || {};
       a.spend += m.spend || 0;
+      a.nc_spend += ncSpendOf(m);
       a.rev += m.rev || 0;
       a.txns += m.txns || 0;
       a.impressions += m.impressions || 0;
@@ -63,16 +73,16 @@ export function aggregate(ads) {
       a.count += 1;
       return a;
     },
-    { spend: 0, rev: 0, txns: 0, impressions: 0, clicks: 0,
+    { spend: 0, nc_spend: 0, rev: 0, txns: 0, impressions: 0, clicks: 0,
       pixel_rev: 0, pixel_txns: 0, nc_txns: 0, nc_rev: 0,
       new_visitors: 0, visitors: 0, count: 0 }
   );
   return {
     ...tot,
     roas: tot.spend ? tot.rev / tot.spend : 0,
-    pixel_roas: tot.spend ? tot.pixel_rev / tot.spend : 0,
-    ncroas: tot.spend ? tot.nc_rev / tot.spend : 0,
-    nccpa: tot.nc_txns ? tot.spend / tot.nc_txns : null,
+    pixel_roas: tot.nc_spend ? tot.pixel_rev / tot.nc_spend : null,
+    ncroas: tot.nc_spend ? tot.nc_rev / tot.nc_spend : null,
+    nccpa: tot.nc_txns ? tot.nc_spend / tot.nc_txns : null,
     cpm: tot.impressions ? (tot.spend / tot.impressions) * 1000 : 0,
     cpc: tot.clicks ? tot.spend / tot.clicks : null,
     ctr: tot.impressions ? (tot.clicks / tot.impressions) * 100 : null,
@@ -149,11 +159,12 @@ export function consolidate(ads) {
     const top = vs.reduce((x, y) => ((y.metrics.spend || 0) > (x.metrics.spend || 0) ? y : x));
     const sum = (k) => vs.reduce((t, v) => t + (v.metrics[k] || 0), 0);
     const spend = sum("spend"), nc = sum("nc_rev"), rev = sum("rev");
+    const ncs = vs.reduce((t, v) => t + ncSpendOf(v.metrics), 0);
     const dated = vs.filter(v => v.date).sort((x, y) => (x.date < y.date ? -1 : 1));
     const first = dated[0] || top;
     out.push({ ...top, variants: vs, date: first.date, launch_date: first.launch_date,
       carry_over: !!first.carry_over, mature: first.mature, history: vs.every(v => v.history),
-      metrics: { ...top.metrics, spend, rev, nc_rev: nc, roas: spend ? rev / spend : 0, ncroas: top.metrics.ncroas == null && !nc ? null : (spend ? nc / spend : null) } });
+      metrics: { ...top.metrics, spend, nc_spend: ncs, rev, nc_rev: nc, roas: spend ? rev / spend : 0, ncroas: top.metrics.ncroas == null && !nc ? null : (ncs ? nc / ncs : null) } });
   }
   return out;
 }
@@ -270,8 +281,9 @@ export function weeklyFromDaily(ads, days, startIso, endIso, dim = null, topN = 
       const w = wkOf[r[0]];
       if (!w) continue;
       const i = widx.get(w);
-      const v = acc.get(i) || [i, 0, 0, 0, 0];
+      const v = acc.get(i) || [i, 0, 0, 0, 0, 0];
       v[1] += r[1]; v[2] += r[2]; v[3] += r[4]; v[4] += r[5];
+      if (r[0] >= NC.start) v[5] += r[1];
       acc.set(i, v);
     }
     return { ...a, wk: [...acc.values()] };
@@ -290,19 +302,20 @@ export function weekly(ads, weeks, dim = null, topN = 6) {
     }
     keys = [...tot.entries()].sort((x, y) => y[1] - x[1]).slice(0, topN).map((e) => e[0]);
   }
-  const rows = weeks.map((w) => ({ week: w.slice(5), spend: 0, rev: 0, nc_rev: 0, nc_orders: 0 }));
+  const rows = weeks.map((w) => ({ week: w.slice(5), spend: 0, nc_spend: 0, rev: 0, nc_rev: 0, nc_orders: 0 }));
   for (const a of ads) {
     const k = dim ? (keys.includes(a[dim] ?? "(untagged)") ? (a[dim] ?? "(untagged)") : "Other") : null;
-    for (const [i, s, r, nc, nco] of a.wk || []) {
+    for (const [i, s, r, nc, nco, ncs] of a.wk || []) {
       const row = rows[i];
       if (!row) continue;
       row.spend += s; row.rev += r; row.nc_rev += nc; row.nc_orders += nco;
+      row.nc_spend += ncs ?? s;
       if (k) row[k] = (row[k] || 0) + s;
     }
   }
   for (const r of rows) {
     r.roas = r.spend ? r.rev / r.spend : null;
-    r.ncroas = r.spend ? r.nc_rev / r.spend : null;
+    r.ncroas = r.nc_spend ? r.nc_rev / r.nc_spend : null;
   }
   if (dim && rows.some((r) => r.Other)) keys = [...keys, "Other"];
   return { rows, keys };

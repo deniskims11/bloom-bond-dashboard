@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from "recharts";
+import { NC } from "./aggregator.js";
 
 // Day-by-day performance for any set of creatives, inside the date range the
 // calendar has selected. Reads the per-ad daily rows (a.dd) from the manifest:
@@ -24,9 +25,10 @@ export function dailyRows(ads, days, startIso, endIso) {
   const out = [];
   for (let i = hi; i >= lo; i--) {
     const [spend, rev, orders, nc_rev, nc_orders, nv, vis, imps, clicks] = t.get(i) || [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    const nc_spend = i >= NC.start ? spend : 0; // no new-customer data before NC.start
     out.push({
-      date: days[i], spend, rev, orders, nc_rev, nc_orders, imps, clicks, nv, vis,
-      roas: spend ? rev / spend : null, ncroas: spend ? nc_rev / spend : null,
+      date: days[i], spend, nc_spend, rev, orders, nc_rev, nc_orders, imps, clicks, nv, vis,
+      roas: spend ? rev / spend : null, ncroas: nc_spend ? nc_rev / nc_spend : null,
       cpa: orders ? spend / orders : null, cpc: clicks ? spend / clicks : null,
       ctr: imps ? (clicks / imps) * 100 : null, cpm: imps ? (spend / imps) * 1000 : null,
       nvp: vis ? (nv / vis) * 100 : null,
@@ -38,7 +40,7 @@ export function dailyRows(ads, days, startIso, endIso) {
 
 const derive = (r) => ({
   ...r,
-  roas: r.spend ? r.rev / r.spend : null, ncroas: r.spend ? r.nc_rev / r.spend : null,
+  roas: r.spend ? r.rev / r.spend : null, ncroas: r.nc_spend ? r.nc_rev / r.nc_spend : null,
   cpa: r.orders ? r.spend / r.orders : null, cpc: r.clicks ? r.spend / r.clicks : null,
   ctr: r.imps ? (r.clicks / r.imps) * 100 : null, cpm: r.imps ? (r.spend / r.imps) * 1000 : null,
   nvp: r.vis ? (r.nv / r.vis) * 100 : null, aov: r.orders ? r.rev / r.orders : null,
@@ -52,8 +54,8 @@ export function groupRows(rows, gran) {
   const m = new Map();
   for (const r of rows) {
     const k = gran === "week" ? mondayOf(r.date) : r.date.slice(0, 7);
-    const t = m.get(k) || { date: k, first: r.date, last: r.date, n: 0, spend: 0, rev: 0, orders: 0, nc_rev: 0, nc_orders: 0, imps: 0, clicks: 0, nv: 0, vis: 0 };
-    for (const f of ["spend", "rev", "orders", "nc_rev", "nc_orders", "imps", "clicks", "nv", "vis"]) t[f] += r[f] || 0;
+    const t = m.get(k) || { date: k, first: r.date, last: r.date, n: 0, spend: 0, nc_spend: 0, rev: 0, orders: 0, nc_rev: 0, nc_orders: 0, imps: 0, clicks: 0, nv: 0, vis: 0 };
+    for (const f of ["spend", "nc_spend", "rev", "orders", "nc_rev", "nc_orders", "imps", "clicks", "nv", "vis"]) t[f] += r[f] || 0;
     t.first = r.date < t.first ? r.date : t.first; t.last = r.date > t.last ? r.date : t.last; t.n += 1;
     m.set(k, t);
   }
@@ -92,8 +94,8 @@ export default function DailyView({ ads, days, start, end, roasLabel = "ROAS", h
   const cmpName = gran === "day" ? "DoD" : gran === "week" ? "WoW" : "MoM";
   if (!days || !days.length) return <p style={{ fontSize: 12, color: "#8a6f68" }}>Daily data is not available in this build.</p>;
   if (!rows.length) return <p style={{ fontSize: 12, color: "#8a6f68" }}>No days in the selected range.</p>;
-  const tot = rows.reduce((t, r) => { for (const k of ["spend", "rev", "orders", "nc_rev", "imps", "clicks"]) t[k] += r[k]; return t; },
-    { spend: 0, rev: 0, orders: 0, nc_rev: 0, imps: 0, clicks: 0 });
+  const tot = rows.reduce((t, r) => { for (const k of ["spend", "nc_spend", "rev", "orders", "nc_rev", "imps", "clicks"]) t[k] += r[k] || 0; return t; },
+    { spend: 0, nc_spend: 0, rev: 0, orders: 0, nc_rev: 0, imps: 0, clicks: 0 });
   const chart = [...grouped].reverse().map(r => ({ ...r, day: gran === "month" ? r.date : r.date.slice(5) }));
   const th = { padding: "6px 8px", fontSize: 10, fontWeight: 700, color: "#8a6f68", textTransform: "uppercase", textAlign: "right", position: "sticky", top: 0, background: "#fff" };
   const td = { padding: "6px 8px", fontSize: 11, textAlign: "right", borderBottom: "1px solid #F5EDE5" };
@@ -112,7 +114,7 @@ export default function DailyView({ ads, days, start, end, roasLabel = "ROAS", h
       <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", marginBottom: 6 }}>
         {DAILY_METRICS.filter(m => hasNc || !m.nc).map(m => {
           const on = picked.includes(m.key);
-          const t = m.key === "roas" ? (tot.spend ? tot.rev / tot.spend : null) : m.key === "ncroas" ? (tot.spend ? tot.nc_rev / tot.spend : null)
+          const t = m.key === "roas" ? (tot.spend ? tot.rev / tot.spend : null) : m.key === "ncroas" ? (tot.nc_spend ? tot.nc_rev / tot.nc_spend : null)
             : m.key === "cpa" ? (tot.orders ? tot.spend / tot.orders : null) : m.key === "cpc" ? (tot.clicks ? tot.spend / tot.clicks : null)
             : m.key === "ctr" ? (tot.imps ? tot.clicks / tot.imps * 100 : null) : m.key === "cvr" ? (tot.clicks ? tot.orders / tot.clicks * 100 : null)
             : m.key === "cpm" ? (tot.imps ? tot.spend / tot.imps * 1000 : null) : m.key === "aov" ? (tot.orders ? tot.rev / tot.orders : null) : null;

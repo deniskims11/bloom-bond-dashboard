@@ -29,9 +29,10 @@ function segments(node) {
   if (rest.length) {
     const s = rest.reduce((t, k) => t + k.agg.spend, 0);
     const nc = rest.reduce((t, k) => t + (k.agg.nc_rev || 0), 0);
+    const ncs = rest.reduce((t, k) => t + (k.agg.nc_spend ?? k.agg.spend ?? 0), 0);
     const rv = rest.reduce((t, k) => t + (k.agg.rev || 0), 0);
     head.push({ name: `Other (${rest.length})`, other: true, spend: s, share: (s / total) * 100,
-      node: { agg: { spend: s, ncroas: s ? nc / s : null, roas: s ? rv / s : null, count: rest.reduce((t, k) => t + k.agg.count, 0) } } });
+      node: { agg: { spend: s, nc_spend: ncs, nc_rev: nc, ncroas: ncs ? nc / ncs : null, roas: s ? rv / s : null, count: rest.reduce((t, k) => t + k.agg.count, 0) } } });
   }
   return head;
 }

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { NC } from "./aggregator.js";
 
 // NVP Bucket Ledger: every creative's spend in each period (day or week) is
 // bucketed by its New Visitor % in that period — NVP = new visitors ÷ unique
@@ -32,12 +33,12 @@ const plus6 = (iso) => {
   return d.toISOString().slice(0, 10);
 };
 
-const empty = () => ({ spend: 0, rev: 0, nc_rev: 0, clicks: 0, nv: 0, vis: 0, n: 0 });
-const add = (t, s) => { t.spend += s.spend; t.rev += s.rev; t.nc_rev += s.nc_rev; t.clicks += s.clicks; t.nv += s.nv; t.vis += s.vis; t.n += 1; };
+const empty = () => ({ spend: 0, nc_spend: 0, rev: 0, nc_rev: 0, clicks: 0, nv: 0, vis: 0, n: 0 });
+const add = (t, s) => { t.spend += s.spend; t.nc_spend += s.nc_spend; t.rev += s.rev; t.nc_rev += s.nc_rev; t.clicks += s.clicks; t.nv += s.nv; t.vis += s.vis; t.n += 1; };
 const derive = (t, total) => ({
   ...t,
   share: total ? (t.spend / total) * 100 : null,
-  ncroas: t.spend ? t.nc_rev / t.spend : null,
+  ncroas: t.nc_spend ? t.nc_rev / t.nc_spend : null,
   roas: t.spend ? t.rev / t.spend : null,
   cpc: t.clicks ? t.spend / t.clicks : null,
   nvp: t.vis ? (t.nv / t.vis) * 100 : null,
@@ -71,8 +72,9 @@ export default function NvpLedger({ ads, days, baselineNc = 0, roasLabel = "ROAS
         if (r[0] < lo || r[0] > hi) continue;
         const day = days[r[0]];
         const p = rows === "Week" ? mondayOf(day) : day;
-        const t = own.get(p) || { spend: 0, rev: 0, nc_rev: 0, clicks: 0, nv: 0, vis: 0 };
+        const t = own.get(p) || { spend: 0, nc_spend: 0, rev: 0, nc_rev: 0, clicks: 0, nv: 0, vis: 0 };
         t.spend += r[1]; t.rev += r[2]; t.nc_rev += r[4]; t.nv += r[6]; t.vis += r[7]; t.clicks += r[9];
+        if (r[0] >= NC.start) t.nc_spend += r[1];
         own.set(p, t);
       }
       for (const [p, t] of own) {
@@ -85,7 +87,7 @@ export default function NvpLedger({ ads, days, baselineNc = 0, roasLabel = "ROAS
     const tot = { all: empty(), noData: empty(), ...Object.fromEntries(BUCKETS.map(b => [b.key, empty()])) };
     const list = [...per.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).map(([p, P]) => {
       for (const k of Object.keys(tot)) {
-        tot[k].spend += P[k].spend; tot[k].rev += P[k].rev; tot[k].nc_rev += P[k].nc_rev;
+        tot[k].spend += P[k].spend; tot[k].nc_spend += P[k].nc_spend; tot[k].rev += P[k].rev; tot[k].nc_rev += P[k].nc_rev;
         tot[k].clicks += P[k].clicks; tot[k].nv += P[k].nv; tot[k].vis += P[k].vis; tot[k].n += P[k].n;
       }
       const out = { period: p, label: rows === "Week" ? `${p} to ${plus6(p) > last ? last : plus6(p)}` : p };

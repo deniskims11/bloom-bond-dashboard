@@ -32,7 +32,7 @@ import re
 import sys
 from collections import Counter, defaultdict
 from urllib import parse
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MATURE_DAYS = 14
@@ -374,6 +374,9 @@ def parse_old(name, legacy):
 
 
 # ---------------------------------------------------------------- build
+# Triple Whale per-ad new-customer / pixel / visitor data is complete from this day
+# (fetch_tw_sql.TW_COMPLETE). NC ratios divide by spend from this day on only.
+NC_START = "2026-09-05"
 HISTORY_MONTHS = 6  # win-rate history shown, counting back from the window's end month
 
 
@@ -449,7 +452,7 @@ def launch_records(ads, days, codes, legacy, notion):
     for k, t in g.items():
         rs = recs.get(k, [])
         later = sum(x[1] for a in rs for x in a["dd"] if x[0] in after)
-        tw_spend = sum(a["metrics"]["spend"] for a in rs)
+        tw_spend = sum(a["metrics"].get("nc_spend", a["metrics"]["spend"]) for a in rs)
         nc = sum(a["metrics"].get("nc_rev_adj") or a["metrics"]["nc_rev"] for a in rs)
         top = max(rs, key=lambda a: a["metrics"]["spend"]) if rs else {}
         card = notion.get(k) or {}
@@ -667,6 +670,14 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
                 v[len(DD)] += num(x["nc_rev"]) * fac
                 v[len(DD) + 1] += num(x["nc_orders"]) * ofac
 
+        wk_nc = defaultdict(float)  # week index -> spend on new-customer days
+        wmap = {w: i for w, i in widx.items()}
+        for k, v in dd.items():
+            if days[k] >= NC_START:
+                dt = datetime.strptime(days[k], "%Y-%m-%d")
+                wk_nc[wmap.get((dt - timedelta(days=dt.weekday())).strftime("%Y-%m-%d"), -1)] += v[0]
+        # Spend on days that have new-customer data (NC ratios use only this).
+        nc_spend = sum(v[0] for k, v in dd.items() if days[k] >= NC_START) if dd else spend
         image = next((r["image_url"] for r in rs if r.get("image_url")), None)
         video = next((VIDEOS[r["ad_id"]] for r in rs if VIDEOS.get(r["ad_id"])), None)
         aw = norm_awareness(tags.get("awareness_stage"))
@@ -678,14 +689,15 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
             # Triple Whale pixel, Triple Attribution + Views, 7-day window.
             "pixel_rev": round(px_rev, 2), "pixel_txns": px_orders,
             "nc_rev": round(nc_rev, 2), "nc_txns": nc_orders,
-            "ncroas": round(nc_rev / spend, 4) if spend else None,
-            "nccpa": round(spend / nc_orders, 2) if nc_orders else None,
+            "nc_spend": round(nc_spend, 2),
+            "ncroas": round(nc_rev / nc_spend, 4) if nc_spend else None,
+            "nccpa": round(nc_spend / nc_orders, 2) if nc_orders else None,
             "pct_new": round(nc_orders / px_orders * 100, 2) if px_orders else None,
             "new_visitors": new_vis, "visitors": vis,
             "pct_new_visitors": round(new_vis / vis * 100, 2) if vis else None,
             "impressions": imps, "clicks": clicks,
             "roas": round(meta_rev / spend, 4) if spend else 0,
-            "pixel_roas": round(px_rev / spend, 4) if spend else 0,
+            "pixel_roas": round(px_rev / nc_spend, 4) if nc_spend else None,
             "aov": round(meta_rev / meta_conv, 2) if meta_conv else None,
             "cpa": round(spend / meta_conv, 2) if meta_conv else None,
             "cpm": round(spend / imps * 1000, 2) if imps else 0,
@@ -694,7 +706,8 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
             "nc_rev_adj": round(sum(v[len(DD)] for v in dd.values()), 2) if adj else None,
             "nc_txns_adj": round(sum(v[len(DD) + 1] for v in dd.values()), 1) if adj else None,
             "spend_d14": round(s14, 2), "nc_rev_d14": round(n14, 2),
-            "ncroas_d14": round(n14 / s14, 4) if s14 else None,
+            # Day-0-13 NCROAS only for launches inside the new-customer data.
+            "ncroas_d14": round(n14 / s14, 4) if s14 and d and d >= NC_START else None,
         }
         carry = bool(date and date < start_yy)
         mature = bool(date and (end_dt - datetime.strptime("20" + date, "%Y%m%d")).days >= MATURE_DAYS)
@@ -729,7 +742,8 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
             # [dayIdx, spend, meta_rev, meta_conv, nc_rev, nc_orders, new_visitors, visitors,
             #  impressions, clicks, pixel_rev, pixel_orders, nc_rev_adj, nc_orders_adj]
             "dd": [[k] + [round(x, 2) for x in v] for k, v in sorted(dd.items())],
-            "wk": [[k, round(v[0], 2), round(v[1], 2), round(v[2], 2), v[3]] for k, v in sorted(wk.items())],
+            "wk": [[k, round(v[0], 2), round(v[1], 2), round(v[2], 2), v[3], round(wk_nc.get(k, 0.0), 2)]
+                   for k, v in sorted(wk.items())],
             "thumbnail_candidates": [],
             "thumbnail_url": image,
             "preview_link": ads_manager_url(top.get("account_id"), top["ad_id"]),
@@ -767,11 +781,13 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
     tot = sum(a["metrics"]["spend"] for a in ads) or 1
     share = lambda c: sum(a["metrics"]["spend"] for a in ads if a["convention"] == c) / tot
     meta = sum(a["metrics"]["meta_rev"] for a in ads)
+    nc_tot = sum(a["metrics"].get("nc_spend", a["metrics"]["spend"]) for a in ads) or 1
     nc = sum(a["metrics"]["nc_rev"] for a in ads)
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "brand": "Bloom & Bond",
         "period": {"start": start, "end": end},
+        "nc_start": max(NC_START, start),
         "source": "triple-whale-sql-api" if daily else f"triple-whale-sql:{pathlib.Path(ads_path).name}",
         "shop": "6f36e3-2.myshopify.com",
         "has_nc": True,
@@ -783,8 +799,8 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
                         "window": "7DC/1DV (Meta) · 7-day + views (TW NC)"},
         "ad_accounts": sorted({a["ad_account"] for a in ads if a["ad_account"]}),
         "weeks": weeks, "days": days, "mature_days": MATURE_DAYS,
-        "baseline": {"roas": round(meta / tot, 4), "ncroas": round(nc / tot, 4),
-                     "ncroas_adj": round(sum(a["metrics"].get("nc_rev_adj") or 0 for a in ads) / tot, 4) if adj else None},
+        "baseline": {"roas": round(meta / tot, 4), "ncroas": round(nc / nc_tot, 4),
+                     "ncroas_adj": round(sum(a["metrics"].get("nc_rev_adj") or 0 for a in ads) / nc_tot, 4) if adj else None},
         "has_nc_adj": bool(adj),
         "scope_note": (
             f"Every Meta ad that spent {start} → {end}, rolled up to {len(ads):,} creatives. "
