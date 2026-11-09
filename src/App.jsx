@@ -3,6 +3,7 @@ import SpendMix from "./SpendMix.jsx";
 import NvpLedger from "./NvpLedger.jsx";
 import Attribution from "./Attribution.jsx";
 import { openExternal, adsManagerUrl } from "./links.js";
+import AdPreview, { PlayBadge, playable } from "./AdPreview.jsx";
 import { useEffect, useMemo, useState } from "react";
 import {
   BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -243,6 +244,7 @@ function AdListModal({ open, title, subtitle, ads, onClose, days, range, initial
   const [sort, setSort] = useState({ col: "spend", dir: "desc" });
   const [mode, setMode] = useState("ads");
   const [focus, setFocus] = useState(null); // one ad shown by day
+  const [preview, setPreview] = useState(null); // in-dashboard ad player
   useEffect(() => { setMode(initialMode || "ads"); setFocus(null); }, [open, title, initialMode]);
   const sortedAds = useMemo(() => {
     if (!ads) return [];
@@ -351,7 +353,8 @@ function AdListModal({ open, title, subtitle, ads, onClose, days, range, initial
                       {a.ad_name}</td>
                     <td style={{ ...td, textAlign: "center", width: 72 }}>
                       {a.thumbnail_url && previewUrl ? (
-                        <a href={previewUrl} target="_blank" rel="noopener noreferrer" onClick={e => openExternal(e, previewUrl)} title={previewTitle} style={{ display: "inline-block", lineHeight: 0 }}>
+                        <button onClick={() => setPreview({ name: a.ad_name, image: a.thumbnail_url, video: a.video_url, managerUrl: previewUrl })}
+                          title={playable(a.video_url) ? "Play the video" : "View the ad"} style={{ position: "relative", display: "inline-block", lineHeight: 0, padding: 0, border: "none", background: "none", cursor: "pointer" }}>
                           <img src={a.thumbnail_url} alt=""
                             loading="lazy"
                             referrerPolicy="no-referrer"
@@ -364,10 +367,11 @@ function AdListModal({ open, title, subtitle, ads, onClose, days, range, initial
                               const i = Number(el.dataset.ci || 0) + 1;
                               if (i < cands.length) { el.dataset.ci = i; el.src = cands[i]; return; }
                               el.style.display = "none";
-                              el.parentElement.textContent = "Manager ↗";
+                              el.parentElement.textContent = "View ▸";
                             }}
                             style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 4, border: "1px solid #E8DCD0", display: "block" }} />
-                        </a>
+                          {playable(a.video_url) && <PlayBadge />}
+                        </button>
                       ) : a.preview_link ? (
                         <a href={a.preview_link} target="_blank" rel="noopener noreferrer" onClick={e => openExternal(e, a.preview_link)}
                           title={previewTitle}
@@ -396,6 +400,7 @@ function AdListModal({ open, title, subtitle, ads, onClose, days, range, initial
           {sortedAds.length > 500 && <p style={{ fontSize: 11, color: "#b0978f", marginTop: 12, textAlign: "center" }}>Showing top 500 — CSV export includes all {sortedAds.length.toLocaleString()}.</p>}
           </>)}
         </div>
+        <AdPreview ad={preview} onClose={() => setPreview(null)} />
       </div>
     </div>
   );
@@ -2027,6 +2032,31 @@ function ValuePicker({ ads, dim, selected, onToggle, onClear }) {
 // -------- Tree table with expand/collapse + leaf drilldown --------
 function TreeTable({ nodes, dimLabels, onLeafClick, onDaily, tendency, prevMap, timeline, days, range }) {
   const [expanded, setExpanded] = useState(new Set());
+  const [preview, setPreview] = useState(null); // in-dashboard ad player
+  // Top-spending ad with a thumbnail in a row's group (what the Preview cell shows).
+  const topAd = (n) => {
+    let best = null;
+    for (const a of n.ads || []) if (a.thumbnail_url && (!best || (a.metrics?.spend || 0) > (best.metrics?.spend || 0))) best = a;
+    return best;
+  };
+  const previewCell = (n) => {
+    const a = topAd(n);
+    if (!a) return <td style={{ ...td, width: 48 }} />;
+    const managerUrl = a.preview_link || adsManagerUrl(a.ad_account, a.meta_ad_ids || []);
+    const many = (n.ads?.length || 0) > 1;
+    return (
+      <td style={{ ...td, width: 48, padding: "3px 6px", textAlign: "center" }}>
+        <button onClick={e => { e.stopPropagation(); setPreview({ name: a.ad_name, image: a.thumbnail_url, video: a.video_url, managerUrl }); }}
+          title={`${many ? "Top-spending ad in this group: " : ""}${a.ad_name}\n${playable(a.video_url) ? "Play the video" : "View the ad"}`}
+          style={{ position: "relative", display: "inline-block", lineHeight: 0, padding: 0, border: "none", background: "none", cursor: "pointer" }}>
+          <img src={a.thumbnail_url} alt="" loading="lazy" referrerPolicy="no-referrer"
+            onError={e => { e.currentTarget.style.visibility = "hidden"; }}
+            style={{ width: 34, height: 34, objectFit: "cover", borderRadius: 4, border: "1px solid #E8DCD0", display: "block" }} />
+          {playable(a.video_url) && <PlayBadge />}
+        </button>
+      </td>
+    );
+  };
   const [sortCol, setSortCol] = useState("spend");
   const [sortDir, setSortDir] = useState("desc");
   const toggle = (path) => setExpanded(s => {
@@ -2087,6 +2117,7 @@ function TreeTable({ nodes, dimLabels, onLeafClick, onDaily, tendency, prevMap, 
         <td style={{ ...td, paddingLeft: 10 + r.depth * 20, color: "#5a4046" }}>
           <span style={{ display: "inline-block", width: 14, color: "#b0978f" }}>🗓</span>{d.date}
         </td>
+        <td style={td} />
         <td style={{ ...td, textAlign: "right", color: "#b0978f" }}>—</td>
         <td style={{ ...td, textAlign: "right" }}>{fmt(d.spend)}</td>
         <td style={{ ...td, textAlign: "right" }}>{fmt(d.rev)}</td>
@@ -2100,10 +2131,12 @@ function TreeTable({ nodes, dimLabels, onLeafClick, onDaily, tendency, prevMap, 
     );
   };
   return (
+    <>
     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
       <thead>
         <tr style={{ borderBottom: "2px solid #E8DCD0" }}>
           {sortHeader(dimLabels.join(" / "), "value", "left")}
+          <th style={{ ...th, textAlign: "center", cursor: "default" }} title="Top-spending ad in the row; click to watch">Preview</th>
           {sortHeader("Ads", "count")}
           {sortHeader("Spend", "spend")}
           {sortHeader("Revenue", "rev")}
@@ -2129,6 +2162,7 @@ function TreeTable({ nodes, dimLabels, onLeafClick, onDaily, tendency, prevMap, 
               {onDaily && <button onClick={e => { e.stopPropagation(); onDaily(r.n, r.path); }} title="By day"
                 style={{ marginLeft: 8, border: "1px solid #E8DCD0", background: "#fff", borderRadius: 4, cursor: "pointer", fontSize: 10, padding: "1px 5px" }}>📈</button>}
             </td>
+            {previewCell(r.n)}
             <td style={{ ...td, textAlign: "right", color: "#8a6f68" }}>{fmtNum(r.n.agg.count)}</td>
             <td style={{ ...td, textAlign: "right", fontWeight: 500 }}>{fmt(r.n.agg.spend)}{delta(r.path, "spend", r.n.agg.spend)}</td>
             <td style={{ ...td, textAlign: "right" }}>{fmt(r.n.agg.rev)}{delta(r.path, "rev", r.n.agg.rev)}</td>
@@ -2142,6 +2176,8 @@ function TreeTable({ nodes, dimLabels, onLeafClick, onDaily, tendency, prevMap, 
         ))}
       </tbody>
     </table>
+    <AdPreview ad={preview} onClose={() => setPreview(null)} />
+    </>
   );
 }
 

@@ -192,6 +192,25 @@ def main():
         for r in ids:
             fh.write(f"{r['ad_id']};{r.get('campaign_id') or ''};{r.get('adset_id') or ''}\n")
     print(f"  ids {len(ids)}")
+
+    # Ad video URLs (in-dashboard player). Optional: a failure never stops the refresh.
+    # The alias must differ from the column name, or Triple Whale rejects the query.
+    try:
+        vids = sql(f"""
+            SELECT ad_id, argMaxIf(video_url, event_date, video_url != '') AS vurl
+            FROM pixel_joined_tvf()
+            WHERE {WHERE} AND event_date BETWEEN '{s}' AND '{e}' AND spend > 0
+            GROUP BY ad_id""", s, e, key)
+    except SystemExit as err:
+        print(f"WARNING video URLs skipped ({err})")
+        vids = []
+    vmap = {r["ad_id"]: r["vurl"] for r in vids if r.get("vurl")}
+    (out / "tw_video.json").write_text(json.dumps(vmap))
+    from urllib.parse import urlparse
+    hosts = defaultdict(int)
+    for u in vmap.values():
+        hosts[(urlparse(u).hostname or "?").split(".", 1)[-1] + (" .mp4" if ".mp4" in u else "")] += 1
+    print(f"  videos {len(vmap)} {dict(hosts)}")
     daily, meta, meta_urls = merge_meta(out, daily, meta)
 
     # Corrected NC (Meta only). Until the checkout fix on PIXEL_FIX the TW pixel

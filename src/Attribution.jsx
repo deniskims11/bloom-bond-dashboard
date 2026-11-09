@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { ComposedChart, BarChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, LabelList } from "recharts";
 import { openExternal, adsManagerUrl, campaignUrl, adsetUrl } from "./links.js";
+import AdPreview, { PlayBadge, playable } from "./AdPreview.jsx";
 
 // Attribution (Meta), modelled on Moby's Attribution › Meta page: four chart cards
 // for the selected date range, then a Campaigns / Ad Sets / Ads table with the
@@ -29,6 +30,11 @@ const N = 15; // metric slots per dd row (after dayIdx)
 const zero = () => new Array(N).fill(0);
 const add = (t, r) => { for (let j = 0; j < N; j++) t[j] += r[j + 1] || 0; };
 
+// Table column layout (order + hidden), remembered per browser.
+const COL_STORE = "bb_attr_cols_v1";
+const loadCols = () => { try { const v = JSON.parse(localStorage.getItem(COL_STORE)); return v && Array.isArray(v.order) ? v : null; } catch { return null; } };
+const saveCols = v => { try { v ? localStorage.setItem(COL_STORE, JSON.stringify(v)) : localStorage.removeItem(COL_STORE); } catch {} };
+
 // Derived metrics from a summed slot vector.
 function kpis(v) {
   const [spend, mrev, mord, prev, pord, imps, clk] = v;
@@ -41,6 +47,8 @@ function kpis(v) {
     ctr: imps ? (clk / imps) * 100 : null, cpc: clk ? spend / clk : null,
     cpm: imps ? (spend / imps) * 1000 : null, cvr: clk ? (mord / clk) * 100 : null,
     maov: mord ? mrev / mord : null, paov: pord ? prev / pord : null,
+    ncrev: v[7], ncord: v[8],
+    ncroas: spend ? v[7] / spend : null, nccpa: v[8] ? spend / v[8] : null,
   };
 }
 
@@ -117,6 +125,12 @@ export default function Attribution({ attr, days, start, end, accent = "var(--bb
   const [lens, setLens] = useState("meta");
   const [revMetric, setRevMetric] = useState("rev");
   const [lineMetric, setLineMetric] = useState("cvr");
+  const [colLayout, setColLayoutState] = useState(loadCols); // { order: [keys], hidden: [keys] } | null = default
+  const setColLayout = v => { setColLayoutState(v); saveCols(v); };
+  const [dragCol, setDragCol] = useState(null);
+  const [overCol, setOverCol] = useState(null);
+  const [colMenu, setColMenu] = useState(false);
+  const [preview, setPreview] = useState(null);
 
   const lo = useMemo(() => { if (!start) return 0; const i = days.findIndex(d => d >= start); return i < 0 ? days.length : i; }, [days, start]);
   const hi = useMemo(() => { if (!end) return days.length - 1; let i = days.length - 1; while (i >= 0 && days[i] > end) i--; return i; }, [days, end]);
@@ -131,7 +145,7 @@ export default function Attribution({ attr, days, start, end, accent = "var(--bb
       const v = zero();
       for (const r of a[5]) if (r[0] >= lo && r[0] <= hi) add(v, r);
       const set = sets[a[2]];
-      const node = { kind: "a", i, key: `a:${i}`, id: a[0], name: a[1], si: a[2], ci: set?.ci, status: a[3], account: a[4], v, dd: a[5], img: a[6] || "" };
+      const node = { kind: "a", i, key: `a:${i}`, id: a[0], name: a[1], si: a[2], ci: set?.ci, status: a[3], account: a[4], v, dd: a[5], img: a[6] || "", video: a[7] || "" };
       if (set) {
         set.kids.push(node); for (let j = 0; j < N; j++) set.v[j] += v[j];
         if (!set.account && node.account) set.account = node.account;
@@ -183,17 +197,32 @@ export default function Attribution({ attr, days, start, end, accent = "var(--bb
   const toggle = (set, setter, k) => { const s = new Set(set); s.has(k) ? s.delete(k) : s.add(k); setter(s); };
   const shownTotal = kpis(top.reduce((v, n) => { for (let j = 0; j < N; j++) v[j] += n.v[j]; return v; }, zero()));
 
-  const COLS = [
+  const ALL_COLS = [
     ["budget", "Budget", n => (n.kind === "a" ? "—" : budgetText(n.db, n.lb))],
     ["spend", "Spend", n => money(n.m.spend)],
     ["proas", "ROAS", n => x2(n.m.proas), "tw"], ["mroas", "ROAS", n => x2(n.m.mroas), "meta"],
+    ["ncroas", "NC ROAS", n => x2(n.m.ncroas), "tw"],
     ["prev", "Revenue", n => money(n.m.prev), "tw"], ["mrev", "Revenue", n => money(n.m.mrev), "meta"],
     ["pcpa", "CPA", n => money(n.m.pcpa), "tw"], ["mcpa", "CPA", n => money(n.m.mcpa), "meta"],
+    ["nccpa", "NC CPA", n => money(n.m.nccpa), "tw"],
     ["pord", "Orders", n => int(n.m.pord), "tw"], ["mord", "Orders", n => int(n.m.mord), "meta"],
     ["ctr", "CTR", n => pct(n.m.ctr)], ["cpc", "CPC", n => money(n.m.cpc)],
     ["cpm", "CPM", n => money(n.m.cpm)], ["cvr", "CVR", n => pct(n.m.cvr)],
     ["nvp", "% New Vis.", n => (n.m.nvp == null ? "—" : `${n.m.nvp.toFixed(1)}%`), "tw"],
   ];
+  const colKeys = ALL_COLS.map(c => c[0]);
+  const order = colLayout ? [...colLayout.order.filter(k => colKeys.includes(k)), ...colKeys.filter(k => !colLayout.order.includes(k))] : colKeys;
+  const hidden = new Set(colLayout?.hidden || []);
+  const byKey = Object.fromEntries(ALL_COLS.map(c => [c[0], c]));
+  const COLS = order.filter(k => !hidden.has(k)).map(k => byKey[k]);
+  const moveCol = (from, to) => {
+    if (!from || from === to) return;
+    const o = order.filter(k => k !== from);
+    o.splice(o.indexOf(to) + (order.indexOf(from) < order.indexOf(to) ? 1 : 0), 0, from);
+    setColLayout({ order: o, hidden: [...hidden] });
+  };
+  const toggleCol = k => { const h = new Set(hidden); h.has(k) ? h.delete(k) : h.add(k); setColLayout({ order, hidden: [...h] }); };
+  const colName = ([, label, , src]) => `${label}${src ? (src === "tw" ? " (TW)" : " (Meta)") : ""}`;
   const th = { padding: "9px 10px", fontSize: 10, fontWeight: 700, color: MUTED, textTransform: "uppercase", letterSpacing: 0.4, textAlign: "right", whiteSpace: "nowrap", cursor: "pointer", borderBottom: `2px solid ${LINE}`, background: "#FDF9F6", position: "sticky", top: 0 };
   const td = { padding: "8px 10px", fontSize: 12, textAlign: "right", whiteSpace: "nowrap", borderBottom: `1px solid #F5EDE5`, color: INK, fontVariantNumeric: "tabular-nums" };
   const chip = src => (
@@ -227,6 +256,7 @@ export default function Attribution({ attr, days, start, end, accent = "var(--bb
     cpc: ["CPC (outbound)", money], cvr: ["CVR", v => pct(v)], ctr: ["CTR (outbound)", v => pct(v)],
     cpm: ["CPM", money], mcpa: ["CPA (Meta)", money], maov: ["AOV (Meta)", money],
     nvp: ["% New Visitors", v => (v == null ? "—" : `${v.toFixed(1)}%`)],
+    ncroas: ["NC ROAS (TW)", v => (v == null ? "—" : `${v.toFixed(2)}x`)], nccpa: ["NC CPA (TW)", money],
   };
   const pickedNote = picked.size ? `${picked.size} row${picked.size > 1 ? "s" : ""} ticked` : "All Meta";
 
@@ -341,7 +371,7 @@ export default function Attribution({ attr, days, start, end, accent = "var(--bb
             <ComposedChart data={series} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
               <CartesianGrid stroke="#F3EAE2" vertical={false} />
               <XAxis dataKey="label" tick={axis} minTickGap={18} />
-              <YAxis tick={axis} width={42} tickFormatter={v => (["cvr", "ctr", "nvp"].includes(lineMetric) ? `${v.toFixed(1)}%` : `$${v >= 100 ? Math.round(v) : v.toFixed(1)}`)} />
+              <YAxis tick={axis} width={42} tickFormatter={v => (lineMetric === "ncroas" ? `${v.toFixed(1)}x` : ["cvr", "ctr", "nvp"].includes(lineMetric) ? `${v.toFixed(1)}%` : `$${v >= 100 ? Math.round(v) : v.toFixed(1)}`)} />
               <Tooltip content={<TipBox rows={[[lineMetric, LINES[lineMetric][0], LINES[lineMetric][1], "#7C3AED"]]} />} />
               <Line type="monotone" dataKey={lineMetric} stroke="#7C3AED" strokeWidth={2} dot={series.length < 3 ? { r: 4 } : false} connectNulls />
             </ComposedChart>
@@ -361,6 +391,34 @@ export default function Attribution({ attr, days, start, end, accent = "var(--bb
             ))}
           </div>
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <div style={{ position: "relative" }}>
+              <button onClick={() => setColMenu(v => !v)} style={{ border: `1px solid ${LINE}`, background: colMenu ? "#F3F4F6" : "#fff", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, color: INK, cursor: "pointer" }}>
+                Columns{hidden.size ? ` (${COLS.length}/${ALL_COLS.length})` : ""} ▾
+              </button>
+              {colMenu && (
+                <>
+                  <div onClick={() => setColMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 20 }} />
+                  <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 21, background: "#fff", border: `1px solid ${LINE}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", padding: 8, width: 230, maxHeight: 420, overflowY: "auto" }}>
+                    <div style={{ fontSize: 11, color: MUTED, padding: "2px 6px 8px" }}>Tick to show. Drag rows (or the table headers) to reorder.</div>
+                    {order.map(k => (
+                      <label key={k} draggable
+                        onDragStart={e => { setDragCol(k); e.dataTransfer.effectAllowed = "move"; }}
+                        onDragOver={e => { e.preventDefault(); setOverCol(k); }}
+                        onDrop={e => { e.preventDefault(); moveCol(dragCol, k); setDragCol(null); setOverCol(null); }}
+                        onDragEnd={() => { setDragCol(null); setOverCol(null); }}
+                        style={{ display: "flex", gap: 8, alignItems: "center", padding: "5px 6px", borderRadius: 6, fontSize: 12, color: INK, cursor: "grab",
+                          background: overCol === k && dragCol && dragCol !== k ? "#F6EDE5" : "transparent", opacity: dragCol === k ? 0.4 : 1 }}>
+                        <span style={{ color: "#9CA3AF", fontSize: 11 }}>⋮⋮</span>
+                        <input type="checkbox" checked={!hidden.has(k)} onChange={() => toggleCol(k)} />
+                        {colName(byKey[k])}
+                      </label>
+                    ))}
+                    <button onClick={() => setColLayout(null)} disabled={!colLayout}
+                      style={{ marginTop: 6, width: "100%", border: `1px solid ${LINE}`, background: "#fff", borderRadius: 6, padding: "6px 8px", fontSize: 12, color: colLayout ? INK : "#9CA3AF", cursor: colLayout ? "pointer" : "default" }}>Reset to default</button>
+                  </div>
+                </>
+              )}
+            </div>
             <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12, color: INK, cursor: "pointer" }}>
               <input type="checkbox" checked={activeOnly} onChange={e => setActiveOnly(e.target.checked)} /> Active only
             </label>
@@ -377,7 +435,14 @@ export default function Attribution({ attr, days, start, end, accent = "var(--bb
                 <th style={{ ...th, textAlign: "center", cursor: "default" }}>Preview</th>
                 <th style={{ ...th, textAlign: "left", minWidth: 280 }} onClick={() => setSort(["name", sort[0] === "name" ? -sort[1] : 1])}>Name{sort[0] === "name" ? (sort[1] < 0 ? " ↓" : " ↑") : ""}</th>
                 {COLS.map(([k, label, , src]) => (
-                  <th key={k} style={th} onClick={() => setSort([k, sort[0] === k ? -sort[1] : -1])}>
+                  <th key={k} draggable title="Click to sort · drag to move"
+                    onDragStart={e => { setDragCol(k); e.dataTransfer.effectAllowed = "move"; }}
+                    onDragOver={e => { e.preventDefault(); setOverCol(k); }}
+                    onDrop={e => { e.preventDefault(); moveCol(dragCol, k); setDragCol(null); setOverCol(null); }}
+                    onDragEnd={() => { setDragCol(null); setOverCol(null); }}
+                    style={{ ...th, opacity: dragCol === k ? 0.4 : 1,
+                      boxShadow: overCol === k && dragCol && dragCol !== k ? `inset ${order.indexOf(dragCol) < order.indexOf(k) ? "-3px" : "3px"} 0 0 ${accent}` : "none" }}
+                    onClick={() => setSort([k, sort[0] === k ? -sort[1] : -1])}>
                     {label}{src && chip(src)}{sort[0] === k ? (sort[1] < 0 ? " ↓" : " ↑") : ""}
                   </th>
                 ))}
@@ -396,11 +461,13 @@ export default function Attribution({ attr, days, start, end, accent = "var(--bb
                     <td style={{ ...td, textAlign: "left" }}><StatusDot status={n.status} /></td>
                     <td style={{ ...td, textAlign: "center", padding: "4px 8px", width: 56 }}>
                       {n.kind === "a" && n.img ? (
-                        <a href={url} target="_blank" rel="noopener noreferrer" onClick={e => openExternal(e, url)} title="Open in Ads Manager" style={{ display: "inline-block", lineHeight: 0 }}>
+                        <button onClick={() => setPreview({ name: n.name, image: n.img, video: n.video, managerUrl: url })}
+                          title={playable(n.video) ? "Play the video" : "View the ad"} style={{ position: "relative", display: "inline-block", lineHeight: 0, padding: 0, border: "none", background: "none", cursor: "pointer" }}>
                           <img src={n.img} alt="" loading="lazy" referrerPolicy="no-referrer"
                             onError={e => { e.currentTarget.style.display = "none"; }}
                             style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 4, border: `1px solid ${LINE}`, display: "block" }} />
-                        </a>
+                          {playable(n.video) && <PlayBadge />}
+                        </button>
                       ) : null}
                     </td>
                     <td style={{ ...td, textAlign: "left", maxWidth: 420, overflow: "hidden", textOverflow: "ellipsis", paddingLeft: 10 + depth * 18 }} title={n.name}>
@@ -441,6 +508,7 @@ export default function Attribution({ attr, days, start, end, accent = "var(--bb
           Rows show anything that spent in the selected dates, plus everything currently on.
         </div>
       </div>
+      <AdPreview ad={preview} onClose={() => setPreview(null)} />
     </div>
   );
 }

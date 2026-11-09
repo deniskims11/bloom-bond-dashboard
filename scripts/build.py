@@ -46,6 +46,8 @@ AWARENESS = ["Unaware", "Problem Aware", "Solution Aware", "Product Aware", "Mos
 AD_ACCOUNT_BUSINESS = {"2138674693666259": "1041179378721075"}  # SLD Ad Acc 1 · SLD Ecommerce LLC
 
 
+VIDEOS = {}  # Meta ad ID -> video URL (raw/tw_video.json, from fetch_tw_sql.py)
+
 def ads_manager_url(account, ad_id):
     from urllib.parse import quote
     act = str(account or "").removeprefix("act_")
@@ -666,6 +668,7 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
                 v[len(DD) + 1] += num(x["nc_orders"]) * ofac
 
         image = next((r["image_url"] for r in rs if r.get("image_url")), None)
+        video = next((VIDEOS[r["ad_id"]] for r in rs if VIDEOS.get(r["ad_id"])), None)
         aw = norm_awareness(tags.get("awareness_stage"))
         metrics = {
             "spend": round(spend, 2),
@@ -730,6 +733,7 @@ def build(ads_path, weekly_path, defs_path, legacy_path, start, end, daily_path=
             "thumbnail_candidates": [],
             "thumbnail_url": image,
             "preview_link": ads_manager_url(top.get("account_id"), top["ad_id"]),
+            "video_url": video,
         })
 
     ads.sort(key=lambda a: -a["metrics"]["spend"])
@@ -896,7 +900,7 @@ def build_attribution(ads_path, daily_path, days):
             continue
         acct = (m_ad.get("account") or tw.get("account_id") or "").replace("act_", "")
         out_ads.append([ad_id, m_ad.get("name") or tw.get("ad_name") or ad_id, si, m_ad.get("status", ""), acct, dd,
-                        tw.get("image_url") or ""])
+                        tw.get("image_url") or "", VIDEOS.get(ad_id, "")])
     return {
         "campaigns": [v[1:] for v in sorted(camps.values())],
         "adsets": [v[1:] for v in sorted(adsets.values())],
@@ -912,6 +916,9 @@ def build_attribution(ads_path, daily_path, days):
 
 def main():
     a = sys.argv[1:]
+    vp = pathlib.Path(a[0]).parent / "tw_video.json" if a else None
+    if vp and vp.exists():
+        VIDEOS.update(json.loads(vp.read_text()))
     if len(a) < 4:
         sys.exit("usage: build.py <ads.tsv> <weekly.csv> <start YYYY-MM-DD> <end YYYY-MM-DD> [daily.csv]")
     m = build(a[0], a[1], ROOT / "data" / "definitions.csv", ROOT / "data" / "legacy_map.json", a[2], a[3],
