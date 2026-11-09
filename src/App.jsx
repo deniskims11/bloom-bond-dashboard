@@ -141,7 +141,9 @@ function periodAds(ads, days, startYy, endYy) {
     let nc_spend = 0; // spend on days with new-customer data (NC ratios)
     for (const r of a.dd || []) if (r[0] >= lo && r[0] <= hi && r[0] >= NC.start) nc_spend += r[1];
     const pxRev = hasPx ? t[9] : rev, pxTxns = hasPx ? t[10] : txns;
-    if (spend <= 0 && rev <= 0) continue;
+    // Keep creatives with any activity in the range (late new-customer revenue or visits
+    // can land on days without spend).
+    if (spend <= 0 && rev <= 0 && nc_rev <= 0 && txns <= 0 && nc_txns <= 0 && vis <= 0 && clicks <= 0 && imps <= 0) continue;
     const m = {
       ...a.metrics, spend, nc_spend, rev, txns, meta_rev: hasPx ? rev : a.metrics.meta_rev, meta_txns: hasPx ? txns : a.metrics.meta_txns,
       pixel_rev: pxRev, pixel_txns: pxTxns, nc_rev, nc_txns,
