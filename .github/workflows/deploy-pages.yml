@@ -41,6 +41,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Settled Meta ad-days (encrypted) so each refresh only re-pulls recent days.
+      - uses: actions/cache/restore@v4
+        with:
+          path: raw/meta_cache
+          key: meta-cache-${{ github.run_id }}
+          restore-keys: meta-cache-
+
       - name: Fetch data from Triple Whale
         env:
           TW_API_KEY: ${{ secrets.TW_API_KEY }}
@@ -49,6 +56,11 @@ jobs:
           # Encrypts the published data; the deploy fails without it.
           DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
         run: python3 scripts/fetch_tw_sql.py
+      - uses: actions/cache/save@v4
+        if: hashFiles('raw/meta_cache/daily.bin') != ''
+        with:
+          path: raw/meta_cache
+          key: meta-cache-${{ github.run_id }}
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

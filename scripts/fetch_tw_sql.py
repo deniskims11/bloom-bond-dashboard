@@ -4,9 +4,10 @@ so the dashboard refreshes unattended.
 
     TW_API_KEY=... python3 scripts/fetch_tw_sql.py [--out raw/]
 
-Window: CLEAN_START (the first day Triple Whale's per-ad data is complete for
-both ad accounts, incl. new-customer attribution) through today, capped at
-MAX_DAYS. Pixel / new-customer figures use Triple Attribution + Views, 7-day
+Window: CLEAN_START (Apr 1, 2026) through today, capped at MAX_DAYS. Spend,
+Meta revenue / purchases, impressions and clicks come from Meta directly
+(fetch_meta.py); Triple Whale's per-ad pixel / new-customer data is only complete
+from Sep 5, 2026, so new-customer numbers before then are partial. Pixel / new-customer figures use Triple Attribution + Views, 7-day
 window; Meta's own 7DC/1DV numbers are the channel_reported_* columns.
 
 Writes raw/tw_ads.tsv, raw/tw_weekly.csv and raw/tw_daily.csv in the formats
@@ -31,8 +32,9 @@ from urllib.error import HTTPError
 PIXEL_FIX = "2026-10-19"
 API = "https://api.triplewhale.com/api/v2/orcabase/api/sql"
 SHOP = "6f36e3-2.myshopify.com"
-CLEAN_START = "2026-09-05"
-MAX_DAYS = 180
+CLEAN_START = "2026-04-01"
+TW_COMPLETE = "2026-09-05"  # Triple Whale per-ad pixel data complete from here
+MAX_DAYS = 400
 LAUNCH_LOOKBACK = "2025-01-01"
 CHUNK_DAYS = 7
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -97,6 +99,13 @@ def merge_meta(out, daily, meta):
         r = dict(zip(cols, l.split(";")))
         m[(r["ad_id"], r["date"])] = r
     tw = {(str(r["ad_id"]), r["d"][:10]): r for r in daily}
+    cov = defaultdict(lambda: [0.0, 0.0])
+    for (_, d), r in tw.items():
+        cov[d[:7]][0] += f(r.get("spend"))
+    for (_, d), x in m.items():
+        cov[d[:7]][1] += f(x["spend"])
+    print("  coverage (month: Triple Whale spend / Meta spend): " + ", ".join(
+        f"{k} {v[0] / 1000:,.0f}K/{v[1] / 1000:,.0f}K" for k, v in sorted(cov.items())))
     for key, r in tw.items():
         x = m.get(key)
         for k in META_FIELDS:

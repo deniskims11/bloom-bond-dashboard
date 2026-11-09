@@ -4,7 +4,10 @@ Ad name / Ad ID / Amount spent / Purchases / Purchases conversion value) into
 data/meta_history.json — per-creative launch month and spend before Triple
 Whale's clean window starts (CLEAN_START).
 
-    python3 scripts/meta_history.py raw/meta_history/*.csv
+    python3 scripts/meta_history.py [--before 2026-04-01] raw/meta_history/*.csv
+
+--before keeps only rows that start before that day (the dashboard window start),
+so pre-window spend never overlaps the spend the dashboard pulls itself.
 
 Creatives are rolled up exactly like build.py (same clean() name key). The
 build then adds each creative's Triple Whale spend from CLEAN_START onward, so
@@ -29,14 +32,14 @@ def num(v):
         return 0.0
 
 
-def main(paths):
+def main(paths, before=None):
     cr = defaultdict(lambda: {"months": defaultdict(float), "rev": 0.0, "txns": 0.0, "ad_ids": set()})
     first_month = None
     for p in paths:
         for r in csv.DictReader(open(p, encoding="utf-8-sig")):
             sp = num(r.get("Amount spent (USD)"))
             m = (r.get("Reporting starts") or "")[:7]
-            if not m:
+            if not m or (before and (r.get("Reporting starts") or "") >= before):
                 continue
             first_month = min(first_month or m, m)
             if sp <= 0 and num(r.get("Purchases conversion value")) <= 0:
@@ -60,7 +63,8 @@ def main(paths):
     out.sort(key=lambda x: (x["launch_month"], -x["spend"]))
     dest = ROOT / "data" / "meta_history.json"
     dest.write_text(json.dumps({"source": "Meta Ads Manager export, monthly, Ad level",
-                                "first_month": first_month, "creatives": out}, separators=(",", ":")))
+                                "first_month": first_month, "before": before,
+                                "creatives": out}, separators=(",", ":")))
     by = defaultdict(lambda: [0, 0.0])
     for x in out:
         by[x["launch_month"]][0] += 1
@@ -71,4 +75,8 @@ def main(paths):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    args = sys.argv[1:]
+    before = None
+    if args[:1] == ["--before"]:
+        before, args = args[1], args[2:]
+    main(args, before)

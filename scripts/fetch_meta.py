@@ -14,6 +14,10 @@ Both ad accounts, ad level:
   data/meta_created.json  every published ad with its Meta "Date created" and
                        lifetime spend (replaces the manual Ads Manager export).
 
+Settled days (older than SETTLE_DAYS) are cached between runs in
+raw/meta_cache/daily.bin (AES-GCM with the dashboard password; the workflow keeps
+it with actions/cache), so each refresh only asks Meta for the recent days.
+
 Never fails the refresh: with no token or an API error it prints a warning,
 removes its stale outputs and exits 0, and fetch_tw_sql.py then falls back to
 Triple Whale for everything.
@@ -31,8 +35,9 @@ from urllib.error import HTTPError, URLError
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 API = "https://graph.facebook.com/v23.0"
 ACCOUNTS = {"act_2138674693666259": "SLD Ad Acc 1", "act_1431743774796886": "AD ACC 6"}
-CLEAN_START = "2026-09-05"
+CLEAN_START = "2026-04-01"
 CHUNK_DAYS = 7
+SETTLE_DAYS = 14  # Meta attribution (7-day click) has settled for days older than this
 PURCHASE = ("omni_purchase", "offsite_conversion.fb_pixel_purchase", "purchase")
 ALL_STATUSES = ["ACTIVE", "PAUSED", "DELETED", "PENDING_REVIEW", "DISAPPROVED", "PREAPPROVED",
                 "PENDING_BILLING_INFO", "CAMPAIGN_PAUSED", "ARCHIVED", "ADSET_PAUSED", "IN_PROCESS",
@@ -163,6 +168,49 @@ def clean(v):
     return str(v or "").replace("\t", " ").replace("\n", " ").replace(";", ",")
 
 
+def _aes(password):
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    except ImportError:
+        import subprocess
+        subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "cryptography"], check=True)
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    import hashlib
+    salt = hashlib.sha256(b"bloom-bond-dashboard/meta-cache/v1").digest()[:16]
+    return AESGCM(hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 200_000, 32))
+
+
+def load_cache(path, start):
+    """Cached settled Meta ad-days: (rows, last cached day) or ([], None)."""
+    pw = os.environ.get("DASHBOARD_PASSWORD")
+    if not (pw and path.exists()):
+        return [], None
+    try:
+        import gzip
+        raw = path.read_bytes()
+        c = json.loads(gzip.decompress(_aes(pw).decrypt(raw[:12], raw[12:], None)))
+        if c.get("start") != start.isoformat() or sorted(c.get("accounts", [])) != sorted(ACCOUNTS):
+            return [], None
+        return c["rows"], date.fromisoformat(c["until"])
+    except Exception as e:  # unreadable cache: pull everything again
+        print(f"  Meta cache ignored ({e.__class__.__name__})")
+        return [], None
+
+
+def save_cache(path, start, until, rows):
+    pw = os.environ.get("DASHBOARD_PASSWORD")
+    if not pw:
+        return
+    import gzip
+    path.parent.mkdir(parents=True, exist_ok=True)
+    iv = os.urandom(12)
+    body = gzip.compress(json.dumps({"start": start.isoformat(), "until": until.isoformat(),
+                                     "accounts": sorted(ACCOUNTS), "rows": rows},
+                                    separators=(",", ":")).encode(), 6)
+    path.write_bytes(iv + _aes(pw).encrypt(iv, body, None))
+    print(f"  Meta cache saved: {len(rows)} settled ad-days through {until}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(ROOT / "raw"))
@@ -179,6 +227,11 @@ def main():
 
     end = datetime.now(timezone.utc).date()
     start = date.fromisoformat(CLEAN_START)
+    cache_path = out / "meta_cache" / "daily.bin"
+    cached, cached_until = load_cache(cache_path, start)
+    fetch_from = cached_until + timedelta(days=1) if cached_until else start
+    print(f"  Meta daily: {len(cached)} cached ad-days through {cached_until}, pulling {fetch_from} → {end}"
+          if cached_until else f"  Meta daily: no cache, pulling {start} → {end}")
     try:
         ads, daily, lifetime = {}, [], {}
         for act, label in ACCOUNTS.items():
@@ -198,7 +251,7 @@ def main():
             print(f"  {label}: {len(ads) - n0} ads")
             for r in report(act, token, {"level": "ad", "date_preset": "maximum", "fields": "ad_id,spend"}):
                 lifetime[r["ad_id"]] = lifetime.get(r["ad_id"], 0.0) + float(r.get("spend") or 0)
-            d = start
+            d = fetch_from
             while d <= end:
                 ce = min(d + timedelta(days=CHUNK_DAYS - 1), end)
                 rows = report(act, token, {
@@ -221,6 +274,11 @@ def main():
         for f in files:
             f.unlink(missing_ok=True)
         return
+    fresh = {(r[0], r[1]) for r in daily}
+    daily = [r for r in cached if (r[0], r[1]) not in fresh] + daily
+    settled_until = end - timedelta(days=SETTLE_DAYS + 1)
+    if settled_until >= start:
+        save_cache(cache_path, start, settled_until, [r for r in daily if r[1] <= settled_until.isoformat()])
     if not daily:
         print("WARNING Meta returned no rows: Triple Whale used for everything this refresh")
         for f in files:
