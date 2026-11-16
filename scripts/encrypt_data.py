@@ -39,7 +39,14 @@ def main():
     if mk:
         mkey = base64.urlsafe_b64decode(mk + "=" * (-len(mk) % 4))
         miv = os.urandom(12)
-        mct = AESGCM(mkey).encrypt(miv, gzip.compress(raw, 9), None)
+        keep = ["ad_name", "new_ad_name", "batch_no", "creative_no", "meta_ad_ids", "launch_date",
+                "preview_link", "video_url", "thumbnail_url", "dd", "concept", "reason", "angle",
+                "sub_angle", "icp", "type", "format", "origin", "awareness_stage", "funnel",
+                "landing_page", "profile", "strategist", "writer", "editor", "creator", "agency",
+                "maker", "product", "ad_account", "launch_status"]
+        slim = {k: meta.get(k) for k in ["generated_at", "brand", "nc_start", "ad_accounts", "scope_note", "days"]}
+        slim["ads"] = [{k: a.get(k) for k in keep} for a in meta.get("ads", [])]
+        mct = AESGCM(mkey).encrypt(miv, gzip.compress(json.dumps(slim, separators=(",", ":")).encode(), 9), None)
         (OUT / "mcp.json").write_text(json.dumps({"generated_at": meta.get("generated_at"),
             "iv": base64.b64encode(miv).decode(), "data": base64.b64encode(mct).decode()}, separators=(",", ":")))
         print(f"encrypted mcp.json for the Claude connector: {(OUT / 'mcp.json').stat().st_size / 1e6:.1f} MB")
