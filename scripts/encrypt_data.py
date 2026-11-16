@@ -33,6 +33,16 @@ def main():
     meta = json.loads(raw)
     if meta.get("encrypted"):
         sys.exit("latest.json is already encrypted")
+    # Copy for the Claude connector (bb-dashboard-mcp): same data, its own key (repo
+    # secret MCP_KEY, 32 random bytes base64url). The connector URL carries that key.
+    mk = os.environ.get("MCP_KEY", "")
+    if mk:
+        mkey = base64.urlsafe_b64decode(mk + "=" * (-len(mk) % 4))
+        miv = os.urandom(12)
+        mct = AESGCM(mkey).encrypt(miv, gzip.compress(raw, 9), None)
+        (OUT / "mcp.json").write_text(json.dumps({"generated_at": meta.get("generated_at"),
+            "iv": base64.b64encode(miv).decode(), "data": base64.b64encode(mct).decode()}, separators=(",", ":")))
+        print(f"encrypted mcp.json for the Claude connector: {(OUT / 'mcp.json').stat().st_size / 1e6:.1f} MB")
     key = hashlib.pbkdf2_hmac("sha256", pw.encode(), SALT, ITERATIONS, 32)
     iv = os.urandom(12)
     ct = AESGCM(key).encrypt(iv, gzip.compress(raw, 9), None)

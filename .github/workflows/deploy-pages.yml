@@ -55,6 +55,8 @@ jobs:
           META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
           # Encrypts the published data; the deploy fails without it.
           DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
+          # Key for public/data/mcp.json, the copy the Claude connector reads.
+          MCP_KEY: ${{ secrets.MCP_KEY }}
         run: python3 scripts/fetch_tw_sql.py
       - uses: actions/cache/save@v4
         if: hashFiles('raw/meta_cache/daily.bin') != ''
